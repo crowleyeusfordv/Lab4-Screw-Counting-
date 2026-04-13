@@ -46,7 +46,7 @@ pip install torch torchvision
 ### 3. 安装其余依赖
 
 ```bash
-pip install -r requirements.txt
+pip install -r submission/code/requirements.txt
 ```
 
 ---
@@ -63,7 +63,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # 然后安装依赖
-pip install -r requirements.txt
+pip install -r submission/code/requirements.txt
 ```
 
 ### 3. 放置模型权重
@@ -239,7 +239,7 @@ code/
 ├── run.py                      # 主入口（作业规范接口）           [D]
 ├── pipeline.py                 # 视频处理流程编排                 [D]
 ├── interfaces.py               # 团队协作数据接口定义             [D]
-├── requirements.txt            # Python 依赖列表                 [D]
+├── submission/code/requirements.txt # Python 依赖列表                 [D]
 ├── README.md                   # 本文档                         [D]
 │
 ├── modules/                    # 核心算法模块
