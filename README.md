@@ -1,6 +1,12 @@
-# Lab4 视频螺丝计数 - 团队作业
+# Lab4 视频螺丝计数 - 团队作业（GitHub 协作版）
 
-## 团队成员
+本仓库用于团队协作开发 **视频螺丝分类与计数** 系统。最终提交需要满足课程作业规范（`run.py` 入口、`result.npy`、`time.txt`、mask 图像）。
+
+> 重要说明：本仓库中**有些大文件不会上传到 GitHub**（例如视频、模型权重、部分标注数据）。README 已写清楚哪些文件需要你本地自行准备，以及应该放到哪里。
+
+---
+
+## 1. 团队成员
 
 | 学号 | 姓名 | 分工 |
 |------|------|------|
@@ -9,350 +15,342 @@
 | （学号C） | （姓名C） | C：分类与结果融合 |
 | 523030910103 | 魏思齐 | D：工程封装与评测 |
 
-> **注意**：请各成员在提交前将上方表格中的占位符替换为真实学号和姓名。
+> 提交前请将占位符替换为真实信息。
 
 ---
 
-## 环境配置
+## 2. 仓库目录与“实际运行入口”在哪里？
 
-### 1. 创建并激活 Conda 环境（推荐）
+本仓库根目录下，你需要重点关注 **`submission/code/`** 这一套“可提交/可运行”的代码结构：
 
-本项目推荐使用 **Anaconda / Miniconda** 管理环境。
+- **仓库根目录**：`./`（即你 clone 下来的目录）
+- **可运行代码根目录**：`./submission/code/`
+  - 作业统一入口：`./submission/code/run.py`
+  - 依赖文件：`./submission/code/requirements.txt`
+  - 模型权重目录：`./submission/code/models/`
+  - 工具脚本：`./submission/code/tools/`
 
+> 你在命令行里运行代码时，**推荐先 `cd submission/code` 再执行**，可以避免相对路径混乱。
+
+---
+
+## 3. GitHub 上缺失 / 不上传的文件（你需要本地准备）
+
+### 3.1 视频数据（不建议上传到 GitHub）
+开发视频在我们的本地工程里通常放在：
+- `./vedio_exp/`（示例：`IMG_2374.MOV`、`IMG_2375.MOV`、`IMG_2376.MOV`）
+
+协作者如果没有这些视频，可以：
+- 向队友索要（建议用网盘/私有共享）
+- 或自己用同格式视频先跑通流程（精度另说）
+
+### 3.2 模型权重（通常不会上传）
+请把权重文件放到 **`./submission/code/models/`**：
+
+```
+submission/code/models/
+  detector.pt       # B 提供：one-class YOLO 螺丝检测器权重
+  classifier.pt     # C 提供：5 类分类器权重（Lab2 迁移 / fine-tune）
+```
+
+如果缺少权重：
+- 检测会自动退化为 OpenCV 兜底检测（精度低）
+- 分类会退化为随机/启发式分类（几乎不可用）
+- 但 **run.py 仍能跑通并产出符合格式的输出**（方便工程联调）
+
+### 3.3 标注与中间数据（可选、不一定上传）
+你可能会在本地生成这些目录（通常不提交到 GitHub）：
+- `./submission/frames/`：抽取出的关键帧图像（供标注）
+- `./submission/output/`：运行后输出（`result.npy` / `time.txt` / `masks/`）
+- `./annotations/`：标注文件（CVAT/YOLO/COCO 等）
+
+建议在 `.gitignore` 中忽略大文件目录（由队长决定）。
+
+---
+
+## 4. 环境配置（推荐 Conda）
+
+> 以下命令默认你在 **仓库根目录 `./`** 执行。
+
+### 4.1 创建并激活 Conda 环境
 ```bash
-# 创建名为 screw_count 的 Python 3.10 环境
 conda create -n screw_count python=3.10 -y
-
-# 激活环境
 conda activate screw_count
 ```
 
-### 2. 安装 PyTorch（根据 GPU 驱动选择版本）
-
+### 4.2 安装 PyTorch（按设备选择）
 **有 NVIDIA GPU（CUDA 12.1，适合 RTX 4060 等）：**
-
 ```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
 
-**仅 CPU（无 GPU 或驱动版本不匹配时）：**
-
+**仅 CPU：**
 ```bash
 pip install torch torchvision
 ```
 
-> 其他 CUDA 版本请参考 https://pytorch.org/get-started/locally/ 选择对应命令。
+> 其他 CUDA 版本请参考：https://pytorch.org/get-started/locally/
 
-### 3. 安装其余依赖
-
+### 4.3 安装其余依赖
 ```bash
 pip install -r submission/code/requirements.txt
 ```
 
 ---
 
-**（备选）使用 venv 标准虚拟环境：**
+## 5. 一键运行（作业规范接口）
+
+### 5.1 标准运行命令（必须满足）
+从仓库根目录运行：
+```bash
+python submission/code/run.py \
+  --data_dir /path/to/test_videos_folder \
+  --output_path ./result.npy \
+  --output_time_path ./time.txt \
+  --mask_output_path ./mask_folder/
+```
+
+> 注意：
+> - `--data_dir` 是“包含多个视频文件”的文件夹路径
+> - 输出的 key 必须是“视频文件名不含后缀”
+> - mask 文件名格式必须为 `{video_name}_mask.png`
+
+### 5.2 使用本仓库的开发视频跑通（示例）
+假设开发视频在 `./vedio_exp/`，推荐进入可运行代码目录执行：
 
 ```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
+cd submission/code
 
-# Linux / macOS
-python3 -m venv venv
-source venv/bin/activate
-
-# 然后安装依赖
-pip install -r submission/code/requirements.txt
-```
-
-### 3. 放置模型权重
-
-将训练好的模型权重文件放至 `models/` 目录：
-
-```
-models/
-  detector.pt       # B 负责提供：one-class YOLO 螺丝检测器
-  classifier.pt     # C 负责提供：5 类螺丝分类器（Lab2 迁移/fine-tune）
-```
-
-> **注意**：若 `models/` 目录下缺少权重文件，系统会自动切换到兜底模式
-> （OpenCV 检测 + 随机分类），精度极低，**最终提交前必须确保权重文件存在**。
-
----
-
-## 运行方式
-
-### 标准运行命令（作业规范接口）
-
-```bash
 python run.py \
-    --data_dir /path/to/test_videos_folder \
-    --output_path ./result.npy \
-    --output_time_path ./time.txt \
-    --mask_output_path ./mask_folder/
+  --data_dir ../../vedio_exp/ \
+  --output_path ../output/result.npy \
+  --output_time_path ../output/time.txt \
+  --mask_output_path ../output/masks/
 ```
 
-### 参数说明
-
-| 参数 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| `--data_dir` | str | ✅ | 包含测试视频的文件夹路径 |
-| `--output_path` | str | ✅ | result.npy 输出路径（含文件名） |
-| `--output_time_path` | str | ✅ | time.txt 输出路径（含文件名） |
-| `--mask_output_path` | str | ✅ | 掩膜图像输出文件夹路径 |
-| `--device` | str | ❌ | 推理设备，如 `cuda:0` 或 `cpu`（默认自动选择） |
-| `--no_fp16` | flag | ❌ | 禁用 FP16 推理（CPU 环境建议添加此参数） |
-| `--keyframe_strategy` | str | ❌ | 关键帧策略：`motion`（默认）或 `uniform` |
-| `--dist_thresh` | float | ❌ | 去重聚类距离阈值（像素，默认 40.0） |
-| `--verbose` | flag | ❌ | 输出详细调试日志 |
-
-### 在开发视频上测试
-
+**CPU 环境（或不想用 fp16）**
 ```bash
-# 激活环境后，在 submission/code/ 目录下运行：
+cd submission/code
+
+python run.py \
+  --data_dir ../../vedio_exp/ \
+  --output_path ../output/result.npy \
+  --output_time_path ../output/time.txt \
+  --mask_output_path ../output/masks/ \
+  --device cpu --no_fp16
+```
+
+---
+
+## 6. 输出格式自检（非常重要）
+
+运行结束后，你应该得到：
+
+- `result.npy`：`numpy.load(..., allow_pickle=True).item()` 得到 `dict`
+- `time.txt`：一个数字（秒）
+- `mask_folder/`：每段视频一张 `{video_name}_mask.png`
+
+用以下脚本验证（在任意目录均可）：
+
+```python
+import numpy as np
+
+result = np.load("result.npy", allow_pickle=True).item()
+assert isinstance(result, dict)
+for k, v in result.items():
+    assert isinstance(k, str)
+    assert len(v) == 5
+print("result.npy OK")
+
+with open("time.txt", "r", encoding="utf-8") as f:
+    t = float(f.read().strip())
+print("time.txt OK:", t)
+```
+
+---
+
+## 7. 面向协作者的“按角色工作流”
+
+### 7.1 B（Detector）工作流：训练 one-class YOLO
+目标：生成 `submission/code/models/detector.pt`
+
+建议流程：
+1. 用 D 的工具抽关键帧：
+   ```bash
+   conda activate screw_count
+   python submission/code/tools/extract_keyframes.py \
+     --input vedio_exp/ \
+     --output submission/frames/ \
+     --max_frames 40 \
+     --strategy motion \
+     --export_manifest \
+     --manifest_path submission/frames/keyframe_manifest.json \
+     --manifest_format json
+   ```
+2. 在 CVAT/Roboflow 标注 bbox（统一 label：`screw`）
+3. 用 D 的工具把标注转成 YOLO：
+   ```bash
+   python submission/code/tools/convert_annotations.py \
+     --src annotations/cvat_export.xml \
+     --dst annotations/yolo_labels/ \
+     --from_fmt cvat --to_fmt yolo \
+     --class_names screw
+   ```
+4. 训练 YOLO（由 B 自行组织训练脚本与配置），训练完成后将权重放到：
+   - `submission/code/models/detector.pt`
+
+### 7.2 A（Registration + Dedup）工作流：调参 + 提升去重稳定性
+A 主要关心：
+- `submission/code/modules/registration.py`
+- `submission/code/modules/dedup.py`
+
+建议：
+1. 先用现成权重/兜底模式跑通，观察配准 `valid` 比例
+2. 调整：
+   - `INLIER_RATIO_THRESHOLD`
+   - `AKAZE_THRESHOLD` / `RANSAC_REPROJ_THRESH`
+   - `CLUSTER_DIST_THRESH`（影响去重半径）
+3. 用 D 的 benchmark 工具做速度/稳定性记录（见 §8）
+
+### 7.3 C（Classifier）工作流：迁移 Lab2 分类器 + fine-tune
+目标：生成 `submission/code/models/classifier.pt`
+
+建议流程：
+1. 从视频检测/标注导出 crop：
+   - 若已有 YOLO 标注（推荐）：
+     ```bash
+     python submission/code/tools/export_crops.py \
+       --mode from_labels \
+       --frames_dir submission/frames/ \
+       --labels_dir annotations/yolo_labels/ \
+       --output submission/crops/ \
+       --class_names screw \
+       --html_preview
+     ```
+   - 或者直接用 detector 导出（需要 detector.pt）：
+     ```bash
+     python submission/code/tools/export_crops.py \
+       --mode from_detector \
+       --video_dir vedio_exp/ \
+       --output submission/crops/ \
+       --conf 0.35 \
+       --html_preview
+     ```
+2. 人工把 crop 分拣到 `Type_1~Type_5`（具体数据集组织由 C 决定）
+3. 训练 / fine-tune 后将权重放到：
+   - `submission/code/models/classifier.pt`
+
+---
+
+## 8. Benchmark（速度评估）与 Ablation（消融实验）
+
+### 8.1 速度 Benchmark（D 工具）
+```bash
 conda activate screw_count
 
-# 使用开发视频（GPU）
-python run.py \
-    --data_dir ../../vedio_exp/ \
-    --output_path ./output/result.npy \
-    --output_time_path ./output/time.txt \
-    --mask_output_path ./output/masks/
-
-# 使用 CPU（无 GPU 时，添加 --no_fp16）
-python run.py \
-    --data_dir ../../vedio_exp/ \
-    --output_path ./output/result.npy \
-    --output_time_path ./output/time.txt \
-    --mask_output_path ./output/masks/ \
-    --device cpu --no_fp16
+python submission/code/tools/benchmark.py \
+  --data_dir vedio_exp/ \
+  --runs 3 \
+  --output_json submission/reports/benchmark.json \
+  --output_md submission/reports/benchmark.md
 ```
 
-### 验证输出格式
-
-```python
-import numpy as np
-
-# 验证 result.npy 格式
-result = np.load("./output/result.npy", allow_pickle=True).item()
-print(type(result))      # <class 'dict'>
-for video_name, counts in result.items():
-    print(f"{video_name}: {counts}")  # {'IMG_2374': [14, 7, 6, 22, 3], ...}
-    assert len(counts) == 5, "计数列表长度必须为 5"
-
-# 验证 time.txt 格式
-with open("./output/time.txt") as f:
-    total_time = float(f.read().strip())
-print(f"总耗时: {total_time:.4f} 秒")
-```
-
----
-
-## 工具脚本使用
-
-### 关键帧抽取（D 工具，用于标注数据准备）
-
+细粒度模块计时（更详细）：
 ```bash
-# 从开发视频抽取关键帧，保存到 frames/ 目录
-python tools/extract_keyframes.py \
-    --input ../../vedio_exp/ \
-    --output frames/ \
-    --max_frames 40 \
-    --strategy motion
-
-# 同时导出帧编号清单（供标注工具导入）
-python tools/extract_keyframes.py \
-    --input ../../vedio_exp/ \
-    --output frames/ \
-    --export_manifest --manifest_path keyframes.json --manifest_format json
+python submission/code/tools/benchmark.py \
+  --data_dir vedio_exp/ \
+  --detailed
 ```
 
-### 标注格式转换（D 工具）
-
+### 8.2 消融实验（D 工具）
 ```bash
-# CVAT XML → YOLO（最常见工作流）
-python tools/convert_annotations.py \
-    --src annotations/cvat_export.xml \
-    --dst annotations/yolo_labels/ \
-    --from_fmt cvat --to_fmt yolo \
-    --class_names screw
+conda activate screw_count
 
-# COCO JSON → YOLO（Roboflow 下载后转换）
-python tools/convert_annotations.py \
-    --src annotations/roboflow.json \
-    --dst annotations/yolo_labels/ \
-    --from_fmt coco --to_fmt yolo
-
-# 仅统计标注数量（不转换）
-python tools/convert_annotations.py \
-    --src annotations/cvat_export.xml \
-    --from_fmt cvat --stats_only
+python submission/code/tools/ablation.py \
+  --data_dir vedio_exp/ \
+  --output submission/ablation_results/ \
+  --export_markdown --export_latex
 ```
 
-### 速度 Benchmark（D 工具）
+> 若你有 GT（真实计数）文件 `gt.npy`（格式与 `result.npy` 相同），可加：
+> `--gt_path gt.npy` 生成得分与 MAE。
 
-```bash
-# 对开发视频跑 3 次 benchmark
-python tools/benchmark.py \
-    --data_dir ../../vedio_exp/ \
-    --runs 3 \
-    --output_json reports/benchmark.json \
-    --output_md reports/benchmark.md
+---
 
-# 细粒度模块计时（每个步骤单独计时）
-python tools/benchmark.py \
-    --data_dir ../../vedio_exp/ \
-    --detailed
+## 9. 项目结构（以仓库根目录为起点的真实路径）
+
+> 下方为“仓库根目录 `./`”视角的路径。  
+> 实际可运行代码集中在 `./submission/code/`。
+
 ```
-
-### 消融实验（D 工具）
-
-```bash
-# 运行所有消融实验（需要 GT 标签）
-python tools/ablation.py \
-    --data_dir ../../vedio_exp/ \
-    --output ablation_results/ \
-    --gt_path gt.npy \
-    --export_markdown --export_latex
-
-# 仅运行去重策略对比（实验组 A）
-python tools/ablation.py \
-    --data_dir ../../vedio_exp/ \
-    --output ablation_results/ \
-    --group A
-
-# 生成 LaTeX 表格（不重新运行，从已有结果生成）
-python tools/ablation.py \
-    --report_only \
-    --results_path ablation_results/ablation_summary_*.json \
-    --output ablation_results/ \
-    --export_latex
+./
+├── README.md                     # 本文档（协作版说明）
+├── vedio_exp/                    # （可能缺失）开发视频目录（建议不上传）
+│   ├── IMG_2374.MOV
+│   ├── IMG_2375.MOV
+│   └── IMG_2376.MOV
+└── submission/
+    ├── code/
+    │   ├── run.py                # 作业规范入口
+    │   ├── pipeline.py           # 主流程编排（D）
+    │   ├── interfaces.py         # 模块通信接口（D）
+    │   ├── requirements.txt
+    │   ├── models/               # （可能缺失）模型权重目录
+    │   │   ├── detector.pt
+    │   │   └── classifier.pt
+    │   ├── modules/              # A/B/C 的算法模块
+    │   │   ├── detector.py       # B
+    │   │   ├── registration.py   # A
+    │   │   ├── dedup.py          # A
+    │   │   └── classifier.py     # C
+    │   ├── utils/                # D 的工程工具
+    │   │   ├── video_io.py
+    │   │   ├── output_formatter.py
+    │   │   └── visualizer.py
+    │   └── tools/                # D 的数据/评测工具
+    │       ├── extract_keyframes.py
+    │       ├── export_crops.py
+    │       ├── convert_annotations.py
+    │       ├── benchmark.py
+    │       └── ablation.py
+    ├── output/                   # （本地生成）运行输出目录
+    │   ├── result.npy
+    │   ├── time.txt
+    │   └── masks/
+    ├── frames/                   # （本地生成）关键帧导出目录
+    └── reports/                  # （本地生成）benchmark 报告
 ```
 
 ---
 
-## 项目结构
+## 10. 常见问题（协作相关）
 
-```
-code/
-├── run.py                      # 主入口（作业规范接口）           [D]
-├── pipeline.py                 # 视频处理流程编排                 [D]
-├── interfaces.py               # 团队协作数据接口定义             [D]
-├── submission/code/requirements.txt # Python 依赖列表                 [D]
-├── README.md                   # 本文档                         [D]
-│
-├── modules/                    # 核心算法模块
-│   ├── detector.py             # 螺丝检测器（YOLO + SAHI）       [B]
-│   ├── registration.py         # 锚帧几何配准（AKAZE + Homography）[A]
-│   ├── dedup.py                # 全局去重聚类（DBSCAN）           [A]
-│   └── classifier.py           # 5 类螺丝分类器                  [C]
-│
-├── utils/                      # 工程工具包
-│   ├── video_io.py             # 视频读取与帧提取                [D]
-│   ├── output_formatter.py     # 输出格式封装（npy/time/mask）   [D]
-│   └── visualizer.py           # 掩膜叠加与可视化               [D]
-│
-├── tools/                      # 数据工具（独立可运行脚本）
-│   ├── extract_keyframes.py    # 关键帧批量抽取（标注数据准备）   [D]
-│   ├── export_crops.py         # 检测 Crop 导出                  [D]
-│   ├── convert_annotations.py  # 标注格式转换（CVAT/YOLO/COCO）  [D]
-│   ├── benchmark.py            # 速度 Benchmark                  [D]
-│   └── ablation.py             # 消融实验记录与对比              [D]
-│
-└── models/                     # 模型权重目录
-    ├── detector.pt             # YOLO 检测器权重（B 提供）
-    └── classifier.pt           # 分类器权重（C 提供）
-```
+### Q1: 我运行 `open /home/.../IMG_2374_mask.png` 在 Windows 上找不到文件？
+A: `/home/...` 是 **WSL/Linux 路径**。Windows 应使用：
+- `\\wsl.localhost\Ubuntu\home\...` 形式访问
+或在 WSL 内用 `explorer.exe` 打开目录。
+
+### Q2: 我 clone 了仓库但没有 `vedio_exp/`，怎么跑？
+A: 没有视频就无法处理。你需要：
+- 向队友索要开发视频（网盘/私有共享）
+- 或用自己的视频测试流程（输出格式仍可验证）
+
+### Q3: 没有 `models/*.pt` 能跑吗？
+A: 能跑通，但精度很差。最终提交必须提供权重。
+
+### Q4: 我应该在哪个目录运行命令？
+A: 推荐：
+- 从仓库根目录运行：`python submission/code/run.py ...`
+- 或进入：`cd submission/code` 后运行 `python run.py ...`
 
 ---
 
-## 模块接口说明
-
-各模块通过 `interfaces.py` 中定义的数据结构通信：
-
-```python
-# 检测器输出（B → A, C, D）
-Detection(frame_id, bbox, confidence, crop, track_id)
-
-# 配准输出（A → A, D）
-Registration(frame_id, H_to_ref, valid, inlier_ratio)
-
-# 去重聚类输出（A → C, D）
-Cluster(cluster_id, observations, best_crop, class_probs, pred_class, ref_center, ref_bbox)
-
-# 最终结果（D 产出）
-VideoResult(video_name, counts, clusters, processing_time)
-```
+## 11. 贡献说明（D）
+D 已完成：
+- 工程封装：统一入口 `run.py`、主流程 `pipeline.py`
+- 输出封装：`result.npy / time.txt / mask` 的格式严格对齐作业要求
+- 数据工具：抽帧、crop 导出、标注转换
+- 评测工具：benchmark 与消融实验脚本
+- Conda 环境配置与端到端跑通验证
 
 ---
-
-## 各模块 TODO 状态
-
-| 模块 | Owner | 状态 | 关键 TODO |
-|------|-------|------|-----------|
-| `modules/detector.py` | B | 框架完成，待训练 | 将 `models/detector.pt` 放到位；调整 CONF/IOU 阈值；SAHI 参数调优 |
-| `modules/registration.py` | A | 框架完成，待调优 | 验证 3 段开发视频配准成功率 ≥ 90%；调整 AKAZE 参数 |
-| `modules/dedup.py` | A | 框架完成，待调优 | 调整 `CLUSTER_DIST_THRESH`；验证去重后计数误差 |
-| `modules/classifier.py` | C | 框架完成，待迁移 | 将 Lab2 权重迁移至 `models/classifier.pt`；若 baseline < 80% 立即 fine-tune |
-| `pipeline.py` | D | ✅ 完成 | - |
-| `run.py` | D | ✅ 完成 | - |
-| `utils/` | D | ✅ 完成 | - |
-| `tools/` | D | ✅ 完成 | - |
-
----
-
-## 常见问题
-
-**Q: 运行时提示 "YOLO 权重文件不存在"，该怎么办？**
-A: 系统会自动切换到 OpenCV 兜底检测器（精度很低）。请联系 B 获取 `models/detector.pt`，
-或将 B 训练好的权重文件放到 `models/` 目录下。
-
-**Q: 运行时提示 "分类器处于兜底模式（随机启发式）"，该怎么办？**
-A: 请联系 C 获取 `models/classifier.pt`（Lab2 分类器权重）。
-
-**Q: 在 CPU 上运行太慢，怎么加速？**
-A: 使用 `--keyframe_strategy uniform` 减少关键帧数量，同时添加 `--no_fp16` 参数。
-
-**Q: 运行报错 "ModuleNotFoundError: No module named 'ultralytics'"？**
-A: 激活虚拟环境后运行 `pip install -r requirements.txt`。
-
-**Q: 如何只测试输出格式是否正确（不关心精度）？**
-A: 使用 `--dry_run` 参数仅列出视频文件，或先运行然后用以下命令验证输出：
-```bash
-python -c "
-import numpy as np
-r = np.load('result.npy', allow_pickle=True).item()
-print('Keys:', list(r.keys()))
-for k, v in r.items():
-    print(f'  {k}: {v}  (len={len(v)})')
-"
-```
-
----
-
-## 算法概述
-
-```
-视频读取 + 方向校正
-        ↓
-   关键帧提取（基于 ORB 特征点位移）
-        ↓
-   逐帧螺丝检测（one-class YOLO + SAHI）    [B]
-        ↓
-   锚帧几何配准（AKAZE + Homography）       [A]
-        ↓
-   全局坐标系投影 + 去重聚类（DBSCAN）      [A]
-        ↓
-   Cluster 级 5 类分类投票                  [C]
-        ↓
-   输出 result.npy / mask / time.txt        [D]
-```
-
-**核心思路**：将所有关键帧的检测结果投影到统一的参考坐标系，
-通过 DBSCAN 聚类将代表同一颗螺丝的多次检测合并为一个唯一实例（Cluster），
-再对每个 Cluster 进行分类投票，最终统计各类别数量。
-
----
-
-*本项目代码由团队共同开发，各模块分工见上方表格及各文件开头的 Owner 注释。*
