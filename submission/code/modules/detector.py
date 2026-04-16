@@ -20,10 +20,11 @@ TODO (B)：
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -52,6 +53,7 @@ SAHI_OVERLAP: float = 0.20      # SAHI 切片重叠比例
 
 # 模型权重路径（相对于项目根目录）
 DEFAULT_WEIGHTS = Path(__file__).parent.parent / "models" / "detector.pt"
+DEFAULT_CLASS_CONF_JSON = Path(__file__).parent.parent / "configs" / "b_detector_thresholds.json"
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +135,10 @@ def _nms(boxes: np.ndarray, scores: np.ndarray, iou_thresh: float) -> List[int]:
         order = order[inds + 1]
 
     return keep
+
+
+def _normalize_class_name(name: str) -> str:
+    return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +276,7 @@ class YOLODetector:
     def __init__(
         self,
         weights_path: str | Path = DEFAULT_WEIGHTS,
+        class_conf_json_path: Optional[str | Path] = DEFAULT_CLASS_CONF_JSON,
         conf_threshold: float = CONF_THRESHOLD,
         iou_threshold: float = IOU_THRESHOLD,
         use_fp16: bool = USE_FP16,
@@ -282,12 +289,71 @@ class YOLODetector:
         self.use_fp16 = use_fp16
         self.use_sahi = use_sahi
         self.device = device
+        self.class_conf_json_path = Path(class_conf_json_path) if class_conf_json_path else None
 
         self._model = None
         self._sahi_model = None
         self._loaded = False
+        self._model_names: Dict[int, str] = {}
+        self._class_conf_map_norm: Dict[str, float] = {}
 
         self._load_model()
+
+    def _load_class_conf_map(self) -> None:
+        self._class_conf_map_norm = {}
+        if self.class_conf_json_path is None:
+            return
+        if not self.class_conf_json_path.exists():
+            logger.info("类别阈值配置不存在，使用统一 conf_threshold=%.2f", self.conf_threshold)
+            return
+        try:
+            payload = json.loads(self.class_conf_json_path.read_text(encoding="utf-8"))
+            raw_map = payload.get("class_conf_thresholds", payload)
+            if not isinstance(raw_map, dict):
+                logger.warning("类别阈值配置格式错误，忽略: %s", self.class_conf_json_path)
+                return
+            loaded: Dict[str, float] = {}
+            for k, v in raw_map.items():
+                if not isinstance(k, str):
+                    continue
+                try:
+                    loaded[_normalize_class_name(k)] = float(v)
+                except (TypeError, ValueError):
+                    continue
+            if not loaded:
+                logger.warning("类别阈值配置为空，忽略: %s", self.class_conf_json_path)
+                return
+            self._class_conf_map_norm = loaded
+        except Exception as e:
+            logger.warning("读取类别阈值配置失败，忽略 %s: %s", self.class_conf_json_path, e)
+
+    def _validate_class_conf_map(self) -> None:
+        if not self._class_conf_map_norm:
+            return
+        model_keys = {_normalize_class_name(v) for v in self._model_names.values()}
+        matched = model_keys & set(self._class_conf_map_norm.keys())
+        if not matched:
+            logger.warning(
+                "类别阈值配置与模型类别无交集，自动禁用配置: %s",
+                self.class_conf_json_path,
+            )
+            self._class_conf_map_norm = {}
+            return
+        logger.info(
+            "已加载类别阈值配置（匹配类别 %d 个）: %s",
+            len(matched),
+            self.class_conf_json_path,
+        )
+
+    def _pass_class_conf(self, class_name: str, conf: float) -> bool:
+        if not self._class_conf_map_norm:
+            return conf >= self.conf_threshold
+        key = _normalize_class_name(class_name)
+        thr = self._class_conf_map_norm.get(key)
+        if thr is None:
+            # 若配置存在，默认仅保留显式配置过的类别。
+            return False
+        return conf >= thr
 
     def _load_model(self) -> None:
         """
@@ -308,6 +374,14 @@ class YOLODetector:
         try:
             from ultralytics import YOLO
             self._model = YOLO(str(self.weights_path))
+            raw_names = self._model.names
+            if isinstance(raw_names, dict):
+                self._model_names = {int(k): str(v) for k, v in raw_names.items()}
+            else:
+                self._model_names = {i: str(n) for i, n in enumerate(raw_names)}
+
+            self._load_class_conf_map()
+            self._validate_class_conf_map()
 
             # 推理预热（避免首帧耗时过长）
             dummy = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
@@ -432,13 +506,17 @@ class YOLODetector:
         r = results[0]
         boxes_xyxy = r.boxes.xyxy.cpu().numpy()       # (N, 4)
         confidences = r.boxes.conf.cpu().numpy()       # (N,)
+        class_ids = r.boxes.cls.cpu().numpy().astype(int) if r.boxes.cls is not None else np.zeros(len(boxes_xyxy), dtype=int)
         track_ids_arr = (
             r.boxes.id.cpu().numpy().astype(int)
             if (enable_tracking and r.boxes.id is not None)
             else np.full(len(boxes_xyxy), -1, dtype=int)
         )
 
-        for bbox, conf, tid in zip(boxes_xyxy, confidences, track_ids_arr):
+        for bbox, conf, tid, cid in zip(boxes_xyxy, confidences, track_ids_arr, class_ids):
+            cls_name = self._model_names.get(int(cid), str(int(cid)))
+            if not self._pass_class_conf(cls_name, float(conf)):
+                continue
             crop = _bbox_crop(frame, bbox)
             detections.append(Detection(
                 frame_id=frame_id,
@@ -497,6 +575,14 @@ class YOLODetector:
                     bbox_sahi.maxx, bbox_sahi.maxy,
                 ], dtype=np.float32)
                 conf = float(obj_pred.score.value)
+                class_name = ""
+                cat = getattr(obj_pred, "category", None)
+                if cat is not None and hasattr(cat, "name") and cat.name is not None:
+                    class_name = str(cat.name)
+                if not class_name:
+                    class_name = "0"
+                if not self._pass_class_conf(class_name, conf):
+                    continue
                 crop = _bbox_crop(frame, bbox)
                 detections.append(Detection(
                     frame_id=frame_id,
@@ -577,6 +663,7 @@ class Detector:
     def __init__(
         self,
         weights_path: str | Path = DEFAULT_WEIGHTS,
+        class_conf_json_path: Optional[str | Path] = DEFAULT_CLASS_CONF_JSON,
         conf_threshold: float = CONF_THRESHOLD,
         iou_threshold: float = IOU_THRESHOLD,
         use_fp16: bool = USE_FP16,
@@ -585,6 +672,7 @@ class Detector:
     ) -> None:
         self._yolo = YOLODetector(
             weights_path=weights_path,
+            class_conf_json_path=class_conf_json_path,
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             use_fp16=use_fp16,
