@@ -13,3 +13,5 @@ submission/output/
 models/*.pt
 
 HWF-latex-temp/
+
+debug_vis_dir/

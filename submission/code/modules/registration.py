@@ -73,7 +73,7 @@ LOW_RES_LONG_EDGE: int = 960
 # 参考帧选取策略
 # 'first'  : 使用序列第一个关键帧作为参考帧（最简单）
 # 'middle' : 使用序列中间帧（减少边缘帧的变形累积）
-ANCHOR_STRATEGY: str = "first"
+ANCHOR_STRATEGY: str = "middle"
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +391,7 @@ class FrameRegistration:
             "invalid_few_matches": 0,
             "invalid_exception": 0,
         }
+        self._last_sequence_info: Dict[str, object] = {}
 
         logger.info(
             "FrameRegistration 初始化完成 "
@@ -613,6 +614,145 @@ class FrameRegistration:
             inlier_ratio=inlier_ratio,
         )
 
+    def _identity_registration(
+        self,
+        frame_id: int,
+        inlier_ratio: float = 1.0,
+    ) -> Registration:
+        return Registration(
+            frame_id=frame_id,
+            H_to_ref=np.eye(3, dtype=np.float64),
+            valid=True,
+            inlier_ratio=inlier_ratio,
+        )
+
+    def _invalid_registration(self, frame_id: int) -> Registration:
+        return Registration(
+            frame_id=frame_id,
+            H_to_ref=np.eye(3, dtype=np.float64),
+            valid=False,
+            inlier_ratio=0.0,
+        )
+
+    def _compose_registrations(
+        self,
+        child_reg: Registration,
+        parent_reg: Registration,
+    ) -> Registration:
+        if not child_reg.valid or not parent_reg.valid:
+            return self._invalid_registration(child_reg.frame_id)
+        return Registration(
+            frame_id=child_reg.frame_id,
+            H_to_ref=(parent_reg.H_to_ref @ child_reg.H_to_ref).astype(np.float64),
+            valid=True,
+            inlier_ratio=min(child_reg.inlier_ratio, parent_reg.inlier_ratio),
+        )
+
+    def _register_pair(
+        self,
+        query_frame: np.ndarray,
+        query_frame_id: int,
+        query_scale: float,
+        ref_frame: np.ndarray,
+        ref_frame_id: int,
+        ref_scale: float,
+    ) -> Registration:
+        success = self.set_reference(
+            ref_frame,
+            frame_id=ref_frame_id,
+            full_res_scale=ref_scale,
+        )
+        if not success:
+            return self._invalid_registration(query_frame_id)
+        return self.register(
+            query_frame,
+            query_frame_id,
+            full_res_scale=query_scale,
+        )
+
+    def _select_anchor_indices(
+        self,
+        n_frames: int,
+        anchor_count: int,
+    ) -> List[int]:
+        if n_frames <= 0:
+            return []
+
+        anchor_count = max(1, min(anchor_count, n_frames))
+        preferred_root = self._select_reference_index(n_frames)
+
+        if anchor_count == 1:
+            return [preferred_root]
+
+        anchor_indices = np.linspace(0, n_frames - 1, anchor_count, dtype=int).tolist()
+        if preferred_root not in anchor_indices:
+            replace_idx = min(
+                range(len(anchor_indices)),
+                key=lambda i: abs(anchor_indices[i] - preferred_root),
+            )
+            anchor_indices[replace_idx] = preferred_root
+
+        return sorted(set(anchor_indices))
+
+    def _select_global_root_anchor(
+        self,
+        keyframe_images: List[np.ndarray],
+        keyframe_ids: List[int],
+        full_res_scales: List[float],
+        anchor_indices: List[int],
+    ) -> int:
+        preferred_root = self._select_reference_index(len(keyframe_images))
+        ordered_candidates = sorted(
+            anchor_indices,
+            key=lambda idx: (0 if idx == preferred_root else 1, abs(idx - preferred_root), idx),
+        )
+
+        for anchor_idx in ordered_candidates:
+            if self.set_reference(
+                keyframe_images[anchor_idx],
+                frame_id=keyframe_ids[anchor_idx],
+                full_res_scale=full_res_scales[anchor_idx],
+            ):
+                return anchor_idx
+
+        logger.warning(
+            "No anchor frame has enough features to serve as a global reference. "
+            "Falling back to preferred index %d.",
+            preferred_root,
+        )
+        return preferred_root
+
+    def _register_via_known_anchors(
+        self,
+        frame_idx: int,
+        candidate_anchor_indices: List[int],
+        anchor_regs_to_root: Dict[int, Registration],
+        keyframe_images: List[np.ndarray],
+        keyframe_ids: List[int],
+        full_res_scales: List[float],
+    ) -> Tuple[Registration, Optional[int]]:
+        frame_id = keyframe_ids[frame_idx]
+
+        for anchor_idx in candidate_anchor_indices:
+            anchor_to_root = anchor_regs_to_root.get(anchor_idx)
+            if anchor_to_root is None or not anchor_to_root.valid:
+                continue
+
+            local_reg = self._register_pair(
+                query_frame=keyframe_images[frame_idx],
+                query_frame_id=frame_id,
+                query_scale=full_res_scales[frame_idx],
+                ref_frame=keyframe_images[anchor_idx],
+                ref_frame_id=keyframe_ids[anchor_idx],
+                ref_scale=full_res_scales[anchor_idx],
+            )
+            if not local_reg.valid:
+                continue
+
+            return self._compose_registrations(local_reg, anchor_to_root), anchor_idx
+
+        return self._invalid_registration(frame_id), None
+
     # ------------------------------------------------------------------
     # 关键帧序列批量配准
     # ------------------------------------------------------------------
@@ -622,6 +762,7 @@ class FrameRegistration:
         keyframe_images: List[np.ndarray],
         keyframe_ids: List[int],
         full_res_scales: Optional[List[float]] = None,
+        anchor_count: int = 1,
     ) -> List[Registration]:
         """
         对整段视频的关键帧序列进行批量配准。
@@ -647,6 +788,14 @@ class FrameRegistration:
         - 可优化为：选取 4-6 个锚帧 → 每帧对最近锚帧配准 → 合并变换链到第一个锚帧
         - 需验证合并变换是否引入额外误差
         """
+        if anchor_count > 1:
+            return self.register_sequence_multi_anchor(
+                keyframe_images=keyframe_images,
+                keyframe_ids=keyframe_ids,
+                full_res_scales=full_res_scales,
+                anchor_count=anchor_count,
+            )
+
         if not keyframe_images:
             return []
 
@@ -666,6 +815,16 @@ class FrameRegistration:
 
         success = self.set_reference(ref_img, frame_id=ref_id, full_res_scale=ref_scale)
         if not success:
+            self._last_sequence_info = {
+                "mode": "single_anchor",
+                "reference_index": ref_idx,
+                "reference_frame_id": ref_id,
+                "anchor_indices": [ref_idx],
+                "anchor_frame_ids": [ref_id],
+                "frame_anchor_indices": [None] * len(keyframe_ids),
+                "valid_anchor_indices": [],
+                "anchor_parent_indices": {},
+            }
             logger.warning(
                 "参考帧 (idx=%d, frame_id=%d) 特征提取失败，"
                 "所有帧将返回恒等变换（valid=False）。",
@@ -701,12 +860,136 @@ class FrameRegistration:
             else:
                 consecutive_failures = 0
 
+        self._last_sequence_info = {
+            "mode": "single_anchor",
+            "reference_index": ref_idx,
+            "reference_frame_id": ref_id,
+            "anchor_indices": [ref_idx],
+            "anchor_frame_ids": [ref_id],
+            "frame_anchor_indices": [ref_idx] * len(registrations),
+            "valid_anchor_indices": [ref_idx],
+            "anchor_parent_indices": {ref_idx: ref_idx},
+        }
+
         logger.info(
             "批量配准完成: 共 %d 帧，有效 %d 帧 (%.1f%%)，无效 %d 帧。",
             len(registrations),
             sum(1 for r in registrations if r.valid),
             sum(1 for r in registrations if r.valid) / len(registrations) * 100,
             sum(1 for r in registrations if not r.valid),
+        )
+
+        return registrations
+
+    def register_sequence_multi_anchor(
+        self,
+        keyframe_images: List[np.ndarray],
+        keyframe_ids: List[int],
+        full_res_scales: Optional[List[float]] = None,
+        anchor_count: int = 4,
+    ) -> List[Registration]:
+        if not keyframe_images:
+            return []
+
+        if full_res_scales is None:
+            try:
+                default_scale = self._full_res_scale_ref
+            except AttributeError:
+                default_scale = 1.0
+            full_res_scales = [default_scale] * len(keyframe_images)
+
+        if anchor_count <= 1 or len(keyframe_images) <= 1:
+            return self.register_sequence(
+                keyframe_images=keyframe_images,
+                keyframe_ids=keyframe_ids,
+                full_res_scales=full_res_scales,
+                anchor_count=1,
+            )
+
+        anchor_indices = self._select_anchor_indices(len(keyframe_images), anchor_count)
+        root_idx = self._select_global_root_anchor(
+            keyframe_images=keyframe_images,
+            keyframe_ids=keyframe_ids,
+            full_res_scales=full_res_scales,
+            anchor_indices=anchor_indices,
+        )
+        root_frame_id = keyframe_ids[root_idx]
+
+        anchor_regs_to_root: Dict[int, Registration] = {
+            root_idx: self._identity_registration(root_frame_id),
+        }
+        anchor_parent_indices: Dict[int, Optional[int]] = {root_idx: root_idx}
+
+        ordered_anchor_indices = sorted(
+            (idx for idx in anchor_indices if idx != root_idx),
+            key=lambda idx: (abs(idx - root_idx), idx),
+        )
+
+        for anchor_idx in ordered_anchor_indices:
+            candidate_anchor_indices = sorted(
+                (
+                    idx
+                    for idx, reg in anchor_regs_to_root.items()
+                    if idx != anchor_idx and reg.valid
+                ),
+                key=lambda idx: (abs(idx - anchor_idx), abs(idx - root_idx), idx),
+            )
+            reg, used_anchor_idx = self._register_via_known_anchors(
+                frame_idx=anchor_idx,
+                candidate_anchor_indices=candidate_anchor_indices,
+                anchor_regs_to_root=anchor_regs_to_root,
+                keyframe_images=keyframe_images,
+                keyframe_ids=keyframe_ids,
+                full_res_scales=full_res_scales,
+            )
+            anchor_regs_to_root[anchor_idx] = reg
+            anchor_parent_indices[anchor_idx] = used_anchor_idx
+
+        valid_anchor_indices = sorted(
+            idx for idx, reg in anchor_regs_to_root.items() if reg.valid
+        )
+
+        registrations: List[Registration] = []
+        frame_anchor_indices: List[Optional[int]] = []
+        for frame_idx in range(len(keyframe_images)):
+            if frame_idx in anchor_regs_to_root and anchor_regs_to_root[frame_idx].valid:
+                reg = anchor_regs_to_root[frame_idx]
+                used_anchor_idx: Optional[int] = frame_idx
+            else:
+                candidate_anchor_indices = sorted(
+                    valid_anchor_indices,
+                    key=lambda idx: (abs(idx - frame_idx), abs(idx - root_idx), idx),
+                )
+                reg, used_anchor_idx = self._register_via_known_anchors(
+                    frame_idx=frame_idx,
+                    candidate_anchor_indices=candidate_anchor_indices,
+                    anchor_regs_to_root=anchor_regs_to_root,
+                    keyframe_images=keyframe_images,
+                    keyframe_ids=keyframe_ids,
+                    full_res_scales=full_res_scales,
+                )
+
+            registrations.append(reg)
+            frame_anchor_indices.append(used_anchor_idx)
+
+        self._last_sequence_info = {
+            "mode": "multi_anchor",
+            "reference_index": root_idx,
+            "reference_frame_id": root_frame_id,
+            "anchor_indices": anchor_indices,
+            "anchor_frame_ids": [keyframe_ids[idx] for idx in anchor_indices],
+            "frame_anchor_indices": frame_anchor_indices,
+            "anchor_parent_indices": anchor_parent_indices,
+            "valid_anchor_indices": valid_anchor_indices,
+        }
+
+        logger.info(
+            "Multi-anchor registration complete: %d frames, %d anchors, valid anchors %d, valid registrations %d/%d.",
+            len(keyframe_images),
+            len(anchor_indices),
+            len(valid_anchor_indices),
+            sum(1 for r in registrations if r.valid),
+            len(registrations),
         )
 
         return registrations
@@ -750,6 +1033,9 @@ class FrameRegistration:
             invalid_exception    : 因异常无效的次数
         """
         return dict(self._stats)
+
+    def get_last_sequence_info(self) -> Dict[str, object]:
+        return dict(self._last_sequence_info)
 
     def print_stats(self) -> None:
         """打印配准质量统计报告（用于 benchmark 和调试）。"""
