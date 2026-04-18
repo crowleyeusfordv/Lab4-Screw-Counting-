@@ -48,7 +48,7 @@ CLUSTER_DIST_THRESH: float = 40.0
 建议根据螺丝在视频中的实际像素大小调整（通常为螺丝直径的 0.5~1 倍）。
 """
 
-MIN_OBSERVATIONS: int = 1
+MIN_OBSERVATIONS: int = 2
 """
 一个 Cluster 至少需要的观测次数，低于此值的 Cluster 将被过滤。
 设为 1 时不过滤（保留所有检测）。
