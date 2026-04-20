@@ -181,16 +181,14 @@ print("time.txt OK:", t)
     │   ├── count_videos.py                 # 批量视频计数入口
     │   ├── interfaces.py                   # 模块接口定义
     │   ├── requirements.txt                # Python 依赖
-    │   ├── modules/                        # 核心算法模块
-    │   │   ├── detector.py
-    │   │   ├── registration.py
-    │   │   ├── dedup.py
-    │   │   └── classifier.py
+    │   ├── models/                        # 核心算法模块
+    │   │   ├── detector.pt                 # 模型权重
+    │   │   └── B_MODEL_INFO.md             # 模型信息
     │   ├── utils/                          # 通用工具（IO/可视化/输出）
     │   ├── tools/                          # 数据与评测工具脚本
     │   ├── script/                         # 分步骤实验脚本
     │   ├── configs/                        # 配置文件
-    │   ├── models/                         # 推理用权重目录（推荐放置）
+    │   ├── modules/                         # 推理用权重目录（推荐放置）
     │   └── out*/ masks/ _test_out/ ...     # 本地调试输出（不建议入库）
     ├── frames/                             # 抽帧与中间数据（本地生成）
     └── output/                             # 运行输出目录（本地生成）
