@@ -6,65 +6,6 @@
 
 ---
 
-## 0. 最终提交指南（按课程文档）
-
-以 `HOMEWORK_VIDEO_SCREW_COUNTING.md` 为准，最终是 **两部分独立提交**：
-
-1. **代码压缩包**（团队仅队长提交 1 份，交到交大云盘）
-2. **实验报告 PDF**（每位组员单独提交到 Canvas，且写清个人贡献）
-
-### 0.1 代码压缩包必须满足的目录结构
-
-压缩包根目录必须是 `submission/`，核心结构如下：
-
-```text
-submission.zip/
-  code/
-    run.py
-    README.md
-    requirements.txt
-    ...（其他代码与模型）
-```
-
-### 0.2 必须提交（代码包内）
-
-- `submission/code/run.py`：统一入口，参数接口必须与作业要求一致
-- `submission/code/README.md`：环境配置、运行方式、团队成员学号姓名
-- `submission/code/` 下所有运行必须代码（含 `modules/`、`utils/` 等）
-- 模型权重（若代码依赖权重运行，需一并提交）
-
-### 0.3 运行后必须产出（评测时由助教运行代码生成）
-
-运行命令（必须支持）：
-
-```bash
-python run.py --data_dir /path/to/test_videos_folder --output_path ./result.npy --output_time_path ./time.txt --mask_output_path ./mask_folder/
-```
-
-程序应产出：
-
-- `result.npy`：`numpy.load(..., allow_pickle=True).item()` 后是 `dict`
-  - key：视频名（不带后缀）
-  - value：长度为 5 的计数数组，顺序 `[Type_1, Type_2, Type_3, Type_4, Type_5]`
-- `time.txt`：仅一个数字（总处理时长，秒）
-- `mask_folder/`：每段视频 1 张掩膜叠加图，命名 `{video_name}_mask.png`
-
-### 0.4 建议不要放进提交包
-
-- 本地调试输出目录：`out/`、`out_*`、`_test_out/`
-- 日志与临时文件：`run_log*.txt`、`result.npy`（本地测试生成的）、缓存文件
-- 开发视频与中间数据（体积大且非必须）
-
-### 0.5 提交前 1 分钟自检
-
-- 能在干净环境安装：`pip install -r requirements.txt`
-- 能一条命令跑通 `run.py` 且不依赖你机器私有绝对路径
-- `submission/code/README.md` 中已写团队成员姓名+学号
-- 输出格式与命名严格符合作业文档（尤其 key 不带后缀、mask 文件名格式）
-- 打包后解压检查，目录第一层就是 `submission/`
-
----
-
 ## 1. 团队成员
 
 | 学号 | 姓名 | 分工 |
@@ -196,7 +137,7 @@ python run.py \
 
 ---
 
-## 6. 输出格式自检（非常重要）
+## 6. 输出格式
 
 运行结束后，你应该得到：
 
@@ -223,115 +164,7 @@ print("time.txt OK:", t)
 
 ---
 
-## 7. 面向协作者的“按角色工作流”
-
-### 7.1 B（Detector）工作流：训练 one-class YOLO
-目标：生成 `submission/code/models/detector.pt`
-
-建议流程：
-1. 用 D 的工具抽关键帧：
-   ```bash
-   conda activate screw_count
-   python submission/code/tools/extract_keyframes.py \
-     --input vedio_exp/ \
-     --output submission/frames/ \
-     --max_frames 40 \
-     --strategy motion \
-     --export_manifest \
-     --manifest_path submission/frames/keyframe_manifest.json \
-     --manifest_format json
-   ```
-2. 在 CVAT/Roboflow 标注 bbox（统一 label：`screw`）
-3. 用 D 的工具把标注转成 YOLO：
-   ```bash
-   python submission/code/tools/convert_annotations.py \
-     --src annotations/cvat_export.xml \
-     --dst annotations/yolo_labels/ \
-     --from_fmt cvat --to_fmt yolo \
-     --class_names screw
-   ```
-4. 训练 YOLO（由 B 自行组织训练脚本与配置），训练完成后将权重放到：
-   - `submission/code/models/detector.pt`
-
-### 7.2 A（Registration + Dedup）工作流：调参 + 提升去重稳定性
-A 主要关心：
-- `submission/code/modules/registration.py`
-- `submission/code/modules/dedup.py`
-
-建议：
-1. 先用现成权重/兜底模式跑通，观察配准 `valid` 比例
-2. 调整：
-   - `INLIER_RATIO_THRESHOLD`
-   - `AKAZE_THRESHOLD` / `RANSAC_REPROJ_THRESH`
-   - `CLUSTER_DIST_THRESH`（影响去重半径）
-3. 用 D 的 benchmark 工具做速度/稳定性记录（见 §8）
-
-### 7.3 C（Classifier）工作流：迁移 Lab2 分类器 + fine-tune
-目标：生成 `submission/code/models/classifier.pt`
-
-建议流程：
-1. 从视频检测/标注导出 crop：
-   - 若已有 YOLO 标注（推荐）：
-     ```bash
-     python submission/code/tools/export_crops.py \
-       --mode from_labels \
-       --frames_dir submission/frames/ \
-       --labels_dir annotations/yolo_labels/ \
-       --output submission/crops/ \
-       --class_names screw \
-       --html_preview
-     ```
-   - 或者直接用 detector 导出（需要 detector.pt）：
-     ```bash
-     python submission/code/tools/export_crops.py \
-       --mode from_detector \
-       --video_dir vedio_exp/ \
-       --output submission/crops/ \
-       --conf 0.35 \
-       --html_preview
-     ```
-2. 人工把 crop 分拣到 `Type_1~Type_5`（具体数据集组织由 C 决定）
-3. 训练 / fine-tune 后将权重放到：
-   - `submission/code/models/classifier.pt`
-
----
-
-## 8. Benchmark（速度评估）与 Ablation（消融实验）
-
-### 8.1 速度 Benchmark（D 工具）
-```bash
-conda activate screw_count
-
-python submission/code/tools/benchmark.py \
-  --data_dir vedio_exp/ \
-  --runs 3 \
-  --output_json submission/reports/benchmark.json \
-  --output_md submission/reports/benchmark.md
-```
-
-细粒度模块计时（更详细）：
-```bash
-python submission/code/tools/benchmark.py \
-  --data_dir vedio_exp/ \
-  --detailed
-```
-
-### 8.2 消融实验（D 工具）
-```bash
-conda activate screw_count
-
-python submission/code/tools/ablation.py \
-  --data_dir vedio_exp/ \
-  --output submission/ablation_results/ \
-  --export_markdown --export_latex
-```
-
-> 若你有 GT（真实计数）文件 `gt.npy`（格式与 `result.npy` 相同），可加：
-> `--gt_path gt.npy` 生成得分与 MAE。
-
----
-
-## 9. 项目结构（以仓库根目录为起点的真实路径）
+## 7. 项目结构（以仓库根目录为起点的真实路径）
 
 > 下方为“仓库根目录 `./`”视角的路径。  
 > 实际可运行代码集中在 `./submission/code/`。
@@ -377,7 +210,7 @@ python submission/code/tools/ablation.py \
 
 ---
 
-## 10. 常见问题（协作相关）
+## 8. 常见问题
 
 ### Q1: 我运行 `open /home/.../IMG_2374_mask.png` 在 Windows 上找不到文件？
 A: `/home/...` 是 **WSL/Linux 路径**。Windows 应使用：
@@ -391,15 +224,5 @@ A: 能跑通，但精度很差。最终提交必须提供权重。
 A: 推荐：
 - 从仓库根目录运行：`python submission/code/run.py ...`
 - 或进入：`cd submission/code` 后运行 `python run.py ...`
-
----
-
-## 11. 贡献说明（D）
-D 已完成：
-- 工程封装：统一入口 `run.py`、主流程 `pipeline.py`
-- 输出封装：`result.npy / time.txt / mask` 的格式严格对齐作业要求
-- 数据工具：抽帧、crop 导出、标注转换
-- 评测工具：benchmark 与消融实验脚本
-- Conda 环境配置与端到端跑通验证
 
 ---
