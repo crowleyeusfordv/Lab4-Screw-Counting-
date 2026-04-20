@@ -28,6 +28,11 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+try:
+    import torch
+except ImportError:
+    torch = None  # type: ignore[misc, assignment]
+
 # 将项目根目录加入 sys.path（确保 interfaces 可导入）
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -398,15 +403,27 @@ class YOLODetector:
 
             # 推理预热（避免首帧耗时过长）
             dummy = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
-            self._model.predict(
-                dummy,
-                conf=self._effective_predict_conf(),
-                iou=self.iou_threshold,
-                imgsz=IMG_SIZE,
-                half=self.use_fp16,
-                device=self.device or None,
-                verbose=False,
-            )
+            if torch is not None:
+                with torch.inference_mode():
+                    self._model.predict(
+                        dummy,
+                        conf=self._effective_predict_conf(),
+                        iou=self.iou_threshold,
+                        imgsz=IMG_SIZE,
+                        half=self.use_fp16,
+                        device=self.device or None,
+                        verbose=False,
+                    )
+            else:
+                self._model.predict(
+                    dummy,
+                    conf=self._effective_predict_conf(),
+                    iou=self.iou_threshold,
+                    imgsz=IMG_SIZE,
+                    half=self.use_fp16,
+                    device=self.device or None,
+                    verbose=False,
+                )
 
             logger.info("✅ YOLO 模型加载完成: %s", self.weights_path)
             logger.info(
@@ -562,10 +579,19 @@ class YOLODetector:
             verbose=False,
         )
 
+        cm = torch.inference_mode if torch is not None else None
         if enable_tracking:
-            results = self._model.track(frame, persist=True, **kwargs)
+            if cm is not None:
+                with cm():
+                    results = self._model.track(frame, persist=True, **kwargs)
+            else:
+                results = self._model.track(frame, persist=True, **kwargs)
         else:
-            results = self._model.predict(frame, **kwargs)
+            if cm is not None:
+                with cm():
+                    results = self._model.predict(frame, **kwargs)
+            else:
+                results = self._model.predict(frame, **kwargs)
 
         if not results:
             return []
@@ -733,7 +759,12 @@ class YOLODetector:
                 verbose=False,
                 batch=bs,
             )
-            all_results = self._model.predict(frames, **kwargs)
+            cm = torch.inference_mode if torch is not None else None
+            if cm is not None:
+                with cm():
+                    all_results = self._model.predict(frames, **kwargs)
+            else:
+                all_results = self._model.predict(frames, **kwargs)
             out: List[List[Detection]] = []
             for r, fid, frame in zip(all_results, frame_ids, frames):
                 out.append(

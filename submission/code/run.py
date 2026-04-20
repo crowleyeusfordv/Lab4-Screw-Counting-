@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -170,9 +171,16 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     optional.add_argument(
         "--keyframe_strategy",
         type=str,
-        default="motion",
+        default="uniform",
         choices=["motion", "uniform"],
-        help="关键帧提取策略：motion（基于运动位移，推荐）或 uniform（均匀采样）。默认：motion。",
+        help="关键帧提取策略：motion（位移触发，可能更准但更慢）；uniform（均匀采样，较快）。"
+        "默认 uniform（与历史上 run.py 后端一致）。",
+    )
+    optional.add_argument(
+        "--uniform_count",
+        type=int,
+        default=30,
+        help="uniform 策略时的目标关键帧数量（默认 30）。",
     )
     optional.add_argument(
         "--dist_thresh",
@@ -294,6 +302,13 @@ def _validate_args(args: argparse.Namespace, logger: logging.Logger) -> bool:
         logger.error("--min_observations 必须 ≥ 1，当前值: %d", args.min_observations)
         ok = False
 
+    if args.uniform_count < 2 or args.uniform_count > 300:
+        logger.error(
+            "--uniform_count 建议范围 2~300，当前值: %d",
+            args.uniform_count,
+        )
+        ok = False
+
     return ok
 
 
@@ -306,8 +321,8 @@ def _build_count_videos_args(args: argparse.Namespace) -> argparse.Namespace:
     detector_weights = args.detector_weights or "./models/detector.pt"
     classifier_weights = args.classifier_weights or "./models/classifier.pt"
     return argparse.Namespace(
-        keyframe_strategy="uniform",
-        uniform_count=30,
+        keyframe_strategy=args.keyframe_strategy,
+        uniform_count=max(2, args.uniform_count),
         detector_weights=detector_weights,
         device=args.device,
         no_fp16=args.no_fp16,
@@ -425,6 +440,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     _setup_logging(verbose=args.verbose)
     logger = logging.getLogger("run")
 
+    # ---- 解码 / ORB 等运行时调优（不限速精度相关超参）----
+    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "threads;4")
+    cv2.setUseOptimized(True)
+    try:
+        import multiprocessing as _mp
+
+        cv2.setNumThreads(min(8, max(1, _mp.cpu_count() or 4)))
+    except Exception:
+        pass
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
+    except Exception:
+        pass
+
     # ---- 打印启动横幅 ----
     logger.info("=" * 60)
     logger.info("视频螺丝计数系统  Lab4 团队作业")
@@ -437,6 +469,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     logger.info("  device            : %s", args.device or "(自动选择)")
     logger.info("  fp16              : %s", not args.no_fp16)
     logger.info("  keyframe_strategy : %s", args.keyframe_strategy)
+    logger.info("  uniform_count     : %d", args.uniform_count)
     logger.info("  dist_thresh       : %.1f", args.dist_thresh)
     logger.info("  min_observations  : %d", args.min_observations)
     logger.info("  dedup_method      : %s", args.dedup_method)

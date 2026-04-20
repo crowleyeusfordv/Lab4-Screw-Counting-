@@ -420,7 +420,8 @@ class VideoReader:
         """将帧缩放至低分辨率（用于配准）。"""
         scale = self.meta.low_res_scale
         if scale >= 1.0:
-            return frame.copy()
+            # 与 HR 共用缓冲区；下游检测/配准仅读取像素，节省整帧拷贝。
+            return frame
         w, h = self.meta.low_res_size
         return cv2.resize(frame, (w, h), interpolation=cv2.INTER_LINEAR)
 

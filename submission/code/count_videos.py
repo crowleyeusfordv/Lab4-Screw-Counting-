@@ -247,6 +247,7 @@ def _process_video(
 
     try:
         with VideoReader(video_path) as reader:
+            t_kf0 = time.perf_counter()
             if args.keyframe_strategy == "motion":
                 keyframe_ids = _extract_keyframes_motion(reader)
                 actual_strategy = "motion"
@@ -261,10 +262,12 @@ def _process_video(
                 keyframe_ids = extract_keyframes_uniform(reader, target_count=args.uniform_count)
                 actual_strategy = "uniform"
 
+            timing: dict[str, float] = {}
+            timing["keyframe_extract_s"] = time.perf_counter() - t_kf0
+
             if not keyframe_ids:
                 raise RuntimeError(f"No keyframes extracted from video: {video_path}")
 
-            timing: dict[str, float] = {}
             mid_frame_id: int = reader.meta.mid_frame_id
 
             # 一次读出：关键帧 ∪ 中间帧（iter_frames_at 内部按升序 seek，见 video_io）
@@ -360,9 +363,10 @@ def _process_video(
             timing["count_vote_s"] = time.perf_counter() - t_cv0
 
             logger.info(
-                "[%s] 耗时拆分(s): read=%.2f detect=%.2f mid_extra=%.2f register=%.2f "
+                "[%s] 耗时拆分(s): kf=%.2f read=%.2f detect=%.2f mid_extra=%.2f register=%.2f "
                 "dedup=%.2f count=%.2f",
                 video_path.stem,
+                timing["keyframe_extract_s"],
                 timing["read_keyframes_s"],
                 timing["detect_s"],
                 timing["mid_frame_extra_detect_s"],
