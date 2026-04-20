@@ -46,6 +46,7 @@ IOU_THRESHOLD: float = 0.60     # 与离线评测一致的 YOLO NMS IoU 阈值
 IMG_SIZE: int = 1280            # 与 v1 + per-class conf 离线评测一致的推理尺寸
 USE_FP16: bool = True           # 是否使用 FP16 半精度推理（需要 GPU）
 USE_SAHI: bool = False          # 默认关闭，优先对齐离线最佳直接推理工作点
+INFER_BATCH_MAX: int = 16       # predict(list) 时的 batch 上限（与逐帧同超参）
 SAHI_SLICE_H: int = 1280        # SAHI 切片高度
 SAHI_SLICE_W: int = 1280        # SAHI 切片宽度
 SAHI_OVERLAP: float = 0.20      # SAHI 切片重叠比例
@@ -498,6 +499,53 @@ class YOLODetector:
             logger.error("检测推理出错 (frame=%d): %s", frame_id, e)
             return []
 
+    def _parse_single_result(
+        self,
+        r,
+        frame: np.ndarray,
+        frame_id: int,
+        enable_tracking: bool = False,
+    ) -> List[Detection]:
+        """解析单帧 YOLO Result，与原先 _detect_direct 内逻辑一致。"""
+        detections: List[Detection] = []
+        if r is None or r.boxes is None:
+            return detections
+
+        boxes_xyxy = r.boxes.xyxy.cpu().numpy()
+        confidences = r.boxes.conf.cpu().numpy()
+        class_ids = (
+            r.boxes.cls.cpu().numpy().astype(int)
+            if r.boxes.cls is not None
+            else np.zeros(len(boxes_xyxy), dtype=int)
+        )
+        seg_masks = self._extract_seg_masks(r, frame.shape[:2])
+        track_ids_arr = (
+            r.boxes.id.cpu().numpy().astype(int)
+            if (enable_tracking and r.boxes.id is not None)
+            else np.full(len(boxes_xyxy), -1, dtype=int)
+        )
+
+        for i, (bbox, conf, tid, cid) in enumerate(
+            zip(boxes_xyxy, confidences, track_ids_arr, class_ids)
+        ):
+            cls_name = self._model_names.get(int(cid), str(int(cid)))
+            if not self._pass_class_conf(cls_name, float(conf)):
+                continue
+            crop = _bbox_crop(frame, bbox)
+            sm = seg_masks[i] if i < len(seg_masks) else None
+            detections.append(Detection(
+                frame_id=frame_id,
+                bbox=bbox.astype(np.float32),
+                confidence=float(conf),
+                crop=crop,
+                track_id=int(tid),
+                class_id=int(cid),
+                class_name=cls_name,
+                seg_mask=sm,
+            ))
+
+        return detections
+
     def _detect_direct(
         self,
         frame: np.ndarray,
@@ -519,36 +567,12 @@ class YOLODetector:
         else:
             results = self._model.predict(frame, **kwargs)
 
-        detections: List[Detection] = []
-        if not results or results[0].boxes is None:
-            return detections
+        if not results:
+            return []
 
-        r = results[0]
-        boxes_xyxy = r.boxes.xyxy.cpu().numpy()       # (N, 4)
-        confidences = r.boxes.conf.cpu().numpy()       # (N,)
-        class_ids = r.boxes.cls.cpu().numpy().astype(int) if r.boxes.cls is not None else np.zeros(len(boxes_xyxy), dtype=int)
-        seg_masks = self._extract_seg_masks(r, frame.shape[:2])
-        track_ids_arr = (
-            r.boxes.id.cpu().numpy().astype(int)
-            if (enable_tracking and r.boxes.id is not None)
-            else np.full(len(boxes_xyxy), -1, dtype=int)
+        detections = self._parse_single_result(
+            results[0], frame, frame_id, enable_tracking,
         )
-
-        for i, (bbox, conf, tid, cid) in enumerate(zip(boxes_xyxy, confidences, track_ids_arr, class_ids)):
-            cls_name = self._model_names.get(int(cid), str(int(cid)))
-            if not self._pass_class_conf(cls_name, float(conf)):
-                continue
-            crop = _bbox_crop(frame, bbox)
-            detections.append(Detection(
-                frame_id=frame_id,
-                bbox=bbox.astype(np.float32),
-                confidence=float(conf),
-                crop=crop,
-                track_id=int(tid),
-                class_id=int(cid),
-                class_name=cls_name,
-                seg_mask=seg_masks[i],
-            ))
 
         logger.debug(
             "[YOLO 直接推理] frame=%d  检测到 %d 个螺丝",
@@ -692,11 +716,40 @@ class YOLODetector:
         if not self._loaded or self._model is None:
             return [[] for _ in frames]
 
-        # 当前实现：简单逐帧推理（B 可替换为真正的 batch 推理）
-        results = []
-        for frame, fid in zip(frames, frame_ids):
-            results.append(self.detect(frame, fid, enable_tracking=False))
-        return results
+        if self.use_sahi and self._sahi_model is not None:
+            return [
+                self.detect(f, fid, enable_tracking=False)
+                for f, fid in zip(frames, frame_ids)
+            ]
+
+        try:
+            bs = min(INFER_BATCH_MAX, len(frames))
+            kwargs = dict(
+                conf=self._effective_predict_conf(),
+                iou=self.iou_threshold,
+                imgsz=IMG_SIZE,
+                half=self.use_fp16,
+                device=self.device or None,
+                verbose=False,
+                batch=bs,
+            )
+            all_results = self._model.predict(frames, **kwargs)
+            out: List[List[Detection]] = []
+            for r, fid, frame in zip(all_results, frame_ids, frames):
+                out.append(
+                    self._parse_single_result(r, frame, fid, enable_tracking=False),
+                )
+            logger.debug(
+                "[YOLO 批量推理] %d 帧 batch=%d imgsz=%d",
+                len(frames), bs, IMG_SIZE,
+            )
+            return out
+        except Exception as e:
+            logger.warning("批量推理失败，回退逐帧: %s", e)
+            return [
+                self.detect(f, fid, enable_tracking=False)
+                for f, fid in zip(frames, frame_ids)
+            ]
 
 
 # ---------------------------------------------------------------------------

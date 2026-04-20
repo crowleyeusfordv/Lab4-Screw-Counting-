@@ -329,41 +329,46 @@ def _build_count_videos_args(args: argparse.Namespace) -> argparse.Namespace:
 def _make_count_overlay_mask(
     video_path: Path,
     counts: List[int],
+    mid_frame: Optional[np.ndarray] = None,
+    mid_frame_id: int = 0,
+    mid_frame_detections: Optional[List] = None,
     detector=None,
     visualizer=None,
 ) -> Optional[np.ndarray]:
     """
-    生成轻量 mask 叠加图，确保 run.py 按作业规范输出 mask 文件。
-
-    计数来自 count_videos 后端；这里用中间帧叠加计数文本作为提交所需可视化。
+    生成轻量 mask 叠加图。若 count_videos 已提供中间帧与检测，则复用，避免多一次 YOLO。
     """
-    from utils.video_io import VideoReader
-
-    frame: Optional[np.ndarray] = None
-    mid_frame_id: int = 0
-    with VideoReader(video_path) as reader:
-        frame = reader.read_mid_frame()
-        mid_frame_id = reader.meta.mid_frame_id
+    frame: Optional[np.ndarray] = mid_frame
+    if frame is None:
+        from utils.video_io import VideoReader
+        with VideoReader(video_path) as reader:
+            frame = reader.read_mid_frame()
+            mid_frame_id = reader.meta.mid_frame_id
 
     if frame is None:
         return None
 
     overlay = frame.copy()
 
-    # 优先使用 detector 的实例分割掩膜；若不可用则回退到文字面板叠加。
-    if detector is not None and visualizer is not None:
+    detections = mid_frame_detections
+    if detections is None and detector is not None:
         try:
-            detections = detector.detect(frame, frame_id=mid_frame_id, enable_tracking=False)
-            if detections:
-                overlay = visualizer.draw_detections(
-                    frame,
-                    detections,
-                    draw_mask=True,
-                    draw_bbox=True,
-                    use_detection_class_color=True,
-                )
+            detections = detector.detect(
+                frame, frame_id=mid_frame_id, enable_tracking=False,
+            )
         except Exception:
-            # 保持稳健：mask 渲染失败不影响主流程计数输出。
+            detections = []
+
+    if detections and visualizer is not None:
+        try:
+            overlay = visualizer.draw_detections(
+                frame,
+                detections,
+                draw_mask=True,
+                draw_bbox=True,
+                use_detection_class_color=True,
+            )
+        except Exception:
             overlay = frame.copy()
 
     h, w = overlay.shape[:2]
@@ -532,9 +537,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             counts = [int(v) for v in backend_result.get("counts", [0, 0, 0, 0, 0])]
             results[video_name] = counts
 
+            tb = backend_result.get("timing_breakdown")
+            if tb:
+                logger.info("  [耗时拆分] %s", tb)
+
             mask_img = _make_count_overlay_mask(
                 video_path,
                 counts,
+                mid_frame=backend_result.get("mid_frame"),
+                mid_frame_id=int(backend_result.get("mid_frame_id", 0)),
+                mid_frame_detections=backend_result.get("mid_frame_detections"),
                 detector=detector,
                 visualizer=visualizer,
             )

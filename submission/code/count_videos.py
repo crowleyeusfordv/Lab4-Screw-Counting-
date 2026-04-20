@@ -264,53 +264,87 @@ def _process_video(
             if not keyframe_ids:
                 raise RuntimeError(f"No keyframes extracted from video: {video_path}")
 
-            frame_ids: list[int] = []
-            frames_lr = []
-            full_res_scales: list[float] = []
-            all_detections = []
-            total_detections = 0
+            timing: dict[str, float] = {}
+            mid_frame_id: int = reader.meta.mid_frame_id
 
-            for index, (frame_id, frame_hr, frame_lr) in enumerate(
-                reader.iter_frames_at(keyframe_ids, yield_low_res=True),
-                start=1,
+            # 一次读出：关键帧 ∪ 中间帧（iter_frames_at 内部按升序 seek，见 video_io）
+            read_ids_sorted = sorted(set(keyframe_ids) | {mid_frame_id})
+
+            t_read0 = time.perf_counter()
+            store: dict[int, tuple] = {}
+            for frame_id, frame_hr, frame_lr in reader.iter_frames_at(
+                read_ids_sorted, yield_low_res=True,
             ):
                 if frame_hr is None or frame_lr is None:
-                    logger.warning("Failed to read frame %d from %s, skipping.", frame_id, video_path.name)
+                    logger.warning(
+                        "Failed to read frame %d from %s, skipping.",
+                        frame_id, video_path.name,
+                    )
                     continue
+                store[frame_id] = (frame_hr, frame_lr)
 
-                detections = detector.detect(frame_hr, frame_id=frame_id, enable_tracking=False)
+            timing["read_keyframes_s"] = time.perf_counter() - t_read0
 
-                frame_ids.append(frame_id)
-                frames_lr.append(frame_lr)
-                full_res_scales.append(reader.meta.low_res_scale)
-                all_detections.append(detections)
-                total_detections += len(detections)
+            frame_ids = [fid for fid in keyframe_ids if fid in store]
+            if not frame_ids:
+                raise RuntimeError(f"No valid keyframes were loaded from video: {video_path}")
 
+            frames_lr = [store[fid][1] for fid in frame_ids]
+            full_res_scales = [reader.meta.low_res_scale] * len(frame_ids)
+
+            # 检测批次 = 有效关键帧 ∪ 中间帧（若已读出），避免中间帧再单独跑一遍 YOLO
+            detect_fids = sorted((set(frame_ids) | {mid_frame_id}) & set(store.keys()))
+            frames_det_hr = [store[fid][0] for fid in detect_fids]
+
+            t_det0 = time.perf_counter()
+            batch_out = detector.detect_batch(frames_det_hr, detect_fids)
+            timing["detect_s"] = time.perf_counter() - t_det0
+
+            det_map = {fid: dets for fid, dets in zip(detect_fids, batch_out)}
+            all_detections = [det_map[fid] for fid in frame_ids]
+
+            total_detections = sum(len(d) for d in all_detections)
+            for index, (fid, dets) in enumerate(zip(frame_ids, all_detections), start=1):
                 logger.info(
                     "[%s %d/%d] frame_id=%d detections=%d",
                     video_path.stem,
                     index,
-                    len(keyframe_ids),
-                    frame_id,
-                    len(detections),
+                    len(frame_ids),
+                    fid,
+                    len(dets),
                 )
 
-            if not frames_lr:
-                raise RuntimeError(f"No valid keyframes were loaded from video: {video_path}")
+            mid_frame = store[mid_frame_id][0] if mid_frame_id in store else None
+            mid_frame_detections = det_map.get(mid_frame_id, [])
+            timing["mid_frame_extra_detect_s"] = 0.0
 
+            if mid_frame is None:
+                mid_frame = reader.read_frame(mid_frame_id, low_res=False)
+            if mid_frame_id not in det_map and mid_frame is not None:
+                t_mid = time.perf_counter()
+                mid_frame_detections = detector.detect(
+                    mid_frame, frame_id=mid_frame_id, enable_tracking=False,
+                )
+                timing["mid_frame_extra_detect_s"] = time.perf_counter() - t_mid
+
+            t_reg0 = time.perf_counter()
             registrations = registrar.register_sequence(
                 keyframe_images=frames_lr,
                 keyframe_ids=frame_ids,
                 full_res_scales=full_res_scales,
                 anchor_count=max(1, args.anchor_count),
             )
+            timing["register_s"] = time.perf_counter() - t_reg0
             reg_sequence_info = registrar.get_last_sequence_info()
             reg_stats = registrar.get_stats()
             valid_reg_count = sum(1 for reg in registrations if reg.valid)
 
+            t_dd0 = time.perf_counter()
             clusters = deduper.run(all_detections, registrations)
+            timing["dedup_s"] = time.perf_counter() - t_dd0
 
             count_mode_details: dict[str, object] = {"count_mode": args.count_mode}
+            t_cv0 = time.perf_counter()
             if args.count_mode == "classifier":
                 classifier = ScrewClassifier(
                     weights_path=Path(args.classifier_weights),
@@ -323,6 +357,19 @@ def _process_video(
             else:
                 clusters, counts, missing_label_clusters = _classify_clusters_with_detector_votes(clusters)
                 count_mode_details["missing_label_clusters"] = missing_label_clusters
+            timing["count_vote_s"] = time.perf_counter() - t_cv0
+
+            logger.info(
+                "[%s] 耗时拆分(s): read=%.2f detect=%.2f mid_extra=%.2f register=%.2f "
+                "dedup=%.2f count=%.2f",
+                video_path.stem,
+                timing["read_keyframes_s"],
+                timing["detect_s"],
+                timing["mid_frame_extra_detect_s"],
+                timing["register_s"],
+                timing["dedup_s"],
+                timing["count_vote_s"],
+            )
 
             elapsed_sec = time.perf_counter() - start_time
             result = {
@@ -340,6 +387,10 @@ def _process_video(
                 "reference_frame_id": int(reg_sequence_info.get("reference_frame_id", frame_ids[0])),
                 "count_mode_details": count_mode_details,
                 "registration_stats": reg_stats,
+                "mid_frame": mid_frame,
+                "mid_frame_id": int(mid_frame_id),
+                "mid_frame_detections": mid_frame_detections,
+                "timing_breakdown": timing,
             }
             logger.info(
                 "Finished %s: counts=%s total=%d time=%.2fs",
