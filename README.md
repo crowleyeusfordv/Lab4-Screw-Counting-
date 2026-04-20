@@ -45,7 +45,6 @@
 ```
 submission/code/models/
   detector.pt       # B 提供：one-class YOLO 螺丝检测器权重
-  classifier.pt     # C 提供：5 类分类器权重（Lab2 迁移 / fine-tune）
 ```
 
 如果缺少权重：
@@ -169,43 +168,32 @@ print("time.txt OK:", t)
 > 下方为“仓库根目录 `./`”视角的路径。  
 > 实际可运行代码集中在 `./submission/code/`。
 
-```
+```text
 ./
-├── README.md                     # 本文档（协作版说明）
-├── vedio_exp/                    # （可能缺失）开发视频目录（建议不上传）
-│   ├── IMG_2374.MOV
-│   ├── IMG_2375.MOV
-│   └── IMG_2376.MOV
+├── README.md                               # 本文档（项目说明）
+├── HOMEWORK_VIDEO_SCREW_COUNTING.md        # 课程作业要求                       
+├── video_exp/                              # 开发视频目录（本地数据）
+├── models/                                 # 根目录可选模型目录（本地）
 └── submission/
-    ├── code/
-    │   ├── run.py                # 作业规范入口
-    │   ├── pipeline.py           # 主流程编排（D）
-    │   ├── interfaces.py         # 模块通信接口（D）
-    │   ├── requirements.txt
-    │   ├── models/               # （可能缺失）模型权重目录
-    │   │   ├── detector.pt
-    │   │   └── classifier.pt
-    │   ├── modules/              # A/B/C 的算法模块
-    │   │   ├── detector.py       # B
-    │   │   ├── registration.py   # A
-    │   │   ├── dedup.py          # A
-    │   │   └── classifier.py     # C
-    │   ├── utils/                # D 的工程工具
-    │   │   ├── video_io.py
-    │   │   ├── output_formatter.py
-    │   │   └── visualizer.py
-    │   └── tools/                # D 的数据/评测工具
-    │       ├── extract_keyframes.py
-    │       ├── export_crops.py
-    │       ├── convert_annotations.py
-    │       ├── benchmark.py
-    │       └── ablation.py
-    ├── output/                   # （本地生成）运行输出目录
-    │   ├── result.npy
-    │   ├── time.txt
-    │   └── masks/
-    ├── frames/                   # （本地生成）关键帧导出目录
-    └── reports/                  # （本地生成）benchmark 报告
+    ├── code/                               # 可提交、可运行主代码目录
+    │   ├── run.py                          # 作业规范入口
+    │   ├── pipeline.py                     # 主流程编排
+    │   ├── count_videos.py                 # 批量视频计数入口
+    │   ├── interfaces.py                   # 模块接口定义
+    │   ├── requirements.txt                # Python 依赖
+    │   ├── modules/                        # 核心算法模块
+    │   │   ├── detector.py
+    │   │   ├── registration.py
+    │   │   ├── dedup.py
+    │   │   └── classifier.py
+    │   ├── utils/                          # 通用工具（IO/可视化/输出）
+    │   ├── tools/                          # 数据与评测工具脚本
+    │   ├── script/                         # 分步骤实验脚本
+    │   ├── configs/                        # 配置文件
+    │   ├── models/                         # 推理用权重目录（推荐放置）
+    │   └── out*/ masks/ _test_out/ ...     # 本地调试输出（不建议入库）
+    ├── frames/                             # 抽帧与中间数据（本地生成）
+    └── output/                             # 运行输出目录（本地生成）
 ```
 
 ---
