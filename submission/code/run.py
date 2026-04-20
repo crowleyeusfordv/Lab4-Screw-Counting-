@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import random
 import sys
 import time
 from pathlib import Path
@@ -335,15 +336,22 @@ def _make_count_overlay_mask(
     """
     生成轻量 mask 叠加图，确保 run.py 按作业规范输出 mask 文件。
 
-    计数来自 count_videos 后端；这里用中间帧叠加计数文本作为提交所需可视化。
+    计数来自 count_videos 后端；这里随机抽取 1 个关键帧叠加计数文本，
+    避免在计数阶段为每个关键帧都做掩膜提取。
     """
     from utils.video_io import VideoReader
+    from pipeline import extract_keyframes_uniform
 
     frame: Optional[np.ndarray] = None
-    mid_frame_id: int = 0
+    selected_frame_id: int = 0
     with VideoReader(video_path) as reader:
-        frame = reader.read_mid_frame()
-        mid_frame_id = reader.meta.mid_frame_id
+        keyframe_ids = extract_keyframes_uniform(reader, target_count=30)
+        if keyframe_ids:
+            selected_frame_id = random.choice(keyframe_ids)
+            frame = reader.read_frame(selected_frame_id, low_res=False)
+        else:
+            selected_frame_id = reader.meta.mid_frame_id
+            frame = reader.read_frame(selected_frame_id, low_res=False)
 
     if frame is None:
         return None
@@ -353,7 +361,12 @@ def _make_count_overlay_mask(
     # 优先使用 detector 的实例分割掩膜；若不可用则回退到文字面板叠加。
     if detector is not None and visualizer is not None:
         try:
-            detections = detector.detect(frame, frame_id=mid_frame_id, enable_tracking=False)
+            detections = detector.detect(
+                frame,
+                frame_id=selected_frame_id,
+                enable_tracking=False,
+                extract_seg_mask=True,
+            )
             if detections:
                 overlay = visualizer.draw_detections(
                     frame,

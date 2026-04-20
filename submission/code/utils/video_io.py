@@ -394,13 +394,26 @@ class VideoReader:
                 self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_id)
                 current_pos = target_id
 
-            # 顺序读取直到目标帧
-            while current_pos <= target_id:
-                ret, frame = self._cap.read()
-                if not ret or frame is None:
+            # 使用 grab 跳过中间帧，减少不必要的解码与内存拷贝。
+            # 注意 current_pos 始终表示“下一次 read() 会返回的帧编号”。
+            read_ok = True
+            while current_pos < target_id:
+                if not self._cap.grab():
+                    read_ok = False
                     break
+                current_pos += 1
+
+            if not read_ok:
+                logger.warning("跳过到帧 %d 失败。", target_id)
+                continue
+
+            ret, frame = self._cap.read()
+            if ret and frame is not None:
                 cur_frame = frame
                 current_pos += 1
+            else:
+                ret = False
+                frame = None
 
             if not ret or frame is None:
                 logger.warning("读取帧 %d 失败。", target_id)

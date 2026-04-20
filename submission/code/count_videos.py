@@ -278,7 +278,12 @@ def _process_video(
                     logger.warning("Failed to read frame %d from %s, skipping.", frame_id, video_path.name)
                     continue
 
-                detections = detector.detect(frame_hr, frame_id=frame_id, enable_tracking=False)
+                detections = detector.detect(
+                    frame_hr,
+                    frame_id=frame_id,
+                    enable_tracking=False,
+                    extract_seg_mask=False,
+                )
 
                 frame_ids.append(frame_id)
                 frames_lr.append(frame_lr)

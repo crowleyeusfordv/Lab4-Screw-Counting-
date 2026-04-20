@@ -460,6 +460,7 @@ class YOLODetector:
         frame: np.ndarray,
         frame_id: int,
         enable_tracking: bool = False,
+        extract_seg_mask: bool = True,
     ) -> List[Detection]:
         """
         对单帧进行 YOLO 推理，返回 Detection 列表。
@@ -492,7 +493,12 @@ class YOLODetector:
             if self.use_sahi and self._sahi_model is not None and long_edge > 1280:
                 return self._detect_with_sahi(frame, frame_id)
             else:
-                return self._detect_direct(frame, frame_id, enable_tracking)
+                return self._detect_direct(
+                    frame,
+                    frame_id,
+                    enable_tracking,
+                    extract_seg_mask=extract_seg_mask,
+                )
 
         except Exception as e:
             logger.error("检测推理出错 (frame=%d): %s", frame_id, e)
@@ -503,6 +509,7 @@ class YOLODetector:
         frame: np.ndarray,
         frame_id: int,
         enable_tracking: bool,
+        extract_seg_mask: bool = True,
     ) -> List[Detection]:
         """直接对整帧进行 YOLO 推理（适合 1080p 及以下）。"""
         kwargs = dict(
@@ -527,7 +534,10 @@ class YOLODetector:
         boxes_xyxy = r.boxes.xyxy.cpu().numpy()       # (N, 4)
         confidences = r.boxes.conf.cpu().numpy()       # (N,)
         class_ids = r.boxes.cls.cpu().numpy().astype(int) if r.boxes.cls is not None else np.zeros(len(boxes_xyxy), dtype=int)
-        seg_masks = self._extract_seg_masks(r, frame.shape[:2])
+        if extract_seg_mask:
+            seg_masks = self._extract_seg_masks(r, frame.shape[:2])
+        else:
+            seg_masks = [None] * len(boxes_xyxy)
         track_ids_arr = (
             r.boxes.id.cpu().numpy().astype(int)
             if (enable_tracking and r.boxes.id is not None)
@@ -670,6 +680,7 @@ class YOLODetector:
         self,
         frames: List[np.ndarray],
         frame_ids: List[int],
+        extract_seg_mask: bool = True,
     ) -> List[List[Detection]]:
         """
         批量对多帧推理（batch inference），效率高于逐帧调用 detect()。
@@ -695,7 +706,14 @@ class YOLODetector:
         # 当前实现：简单逐帧推理（B 可替换为真正的 batch 推理）
         results = []
         for frame, fid in zip(frames, frame_ids):
-            results.append(self.detect(frame, fid, enable_tracking=False))
+            results.append(
+                self.detect(
+                    frame,
+                    fid,
+                    enable_tracking=False,
+                    extract_seg_mask=extract_seg_mask,
+                )
+            )
         return results
 
 
@@ -768,6 +786,7 @@ class Detector:
         frame: np.ndarray,
         frame_id: int,
         enable_tracking: bool = False,
+        extract_seg_mask: bool = True,
     ) -> List[Detection]:
         """
         对单帧进行检测，自动选择后端。
@@ -787,12 +806,18 @@ class Detector:
         """
         if self._use_fallback:
             return self._fallback.detect(frame, frame_id)
-        return self._yolo.detect(frame, frame_id, enable_tracking=enable_tracking)
+        return self._yolo.detect(
+            frame,
+            frame_id,
+            enable_tracking=enable_tracking,
+            extract_seg_mask=extract_seg_mask,
+        )
 
     def detect_batch(
         self,
         frames: List[np.ndarray],
         frame_ids: List[int],
+        extract_seg_mask: bool = True,
     ) -> List[List[Detection]]:
         """
         批量对多帧检测，自动选择后端。
@@ -810,4 +835,8 @@ class Detector:
         """
         if self._use_fallback:
             return [self._fallback.detect(f, fid) for f, fid in zip(frames, frame_ids)]
-        return self._yolo.detect_batch(frames, frame_ids)
+        return self._yolo.detect_batch(
+            frames,
+            frame_ids,
+            extract_seg_mask=extract_seg_mask,
+        )
