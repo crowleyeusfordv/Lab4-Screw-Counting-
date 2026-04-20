@@ -197,7 +197,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     optional.add_argument(
         "--dedup_method",
         type=str,
-        default="dbscan",
+        default="incremental",
         choices=["dbscan", "incremental"],
         help="去重后端：dbscan 或 incremental（默认 dbscan）。",
     )
