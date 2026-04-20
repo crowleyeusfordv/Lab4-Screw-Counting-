@@ -600,6 +600,7 @@ class Visualizer:
         h = max(original.shape[0], masked.shape[0])
         # 统一高度
         def _resize_h(img, target_h):
+            """Resize h."""
             scale = target_h / img.shape[0]
             return cv2.resize(img, (int(img.shape[1] * scale), target_h))
 

@@ -227,25 +227,31 @@ class ModuleTimingResult:
 
     @property
     def mean(self) -> float:
+        """Mean."""
         return float(np.mean(self.times_seconds)) if self.times_seconds else 0.0
 
     @property
     def min(self) -> float:
+        """Min."""
         return float(np.min(self.times_seconds)) if self.times_seconds else 0.0
 
     @property
     def max(self) -> float:
+        """Max."""
         return float(np.max(self.times_seconds)) if self.times_seconds else 0.0
 
     @property
     def std(self) -> float:
+        """Std."""
         return float(np.std(self.times_seconds)) if self.times_seconds else 0.0
 
     @property
     def n(self) -> int:
+        """N."""
         return len(self.times_seconds)
 
     def to_dict(self) -> Dict:
+        """To dict."""
         return {
             "module": self.module_name,
             "mean_s": round(self.mean, 4),
@@ -298,6 +304,7 @@ class VideoBenchmarkResult:
             self.detection_fps = self.n_keyframes / self.detection_s
 
     def to_dict(self) -> Dict:
+        """To dict."""
         d = {
             "video_name": self.video_name,
             "video_duration_s": round(self.video_duration_s, 2),
@@ -341,6 +348,7 @@ class BenchmarkReport:
     n_runs: int = 1
 
     def to_dict(self) -> Dict:
+        """To dict."""
         return {
             "summary": {
                 "total_videos": len(self.video_results),

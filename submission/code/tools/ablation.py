@@ -806,6 +806,7 @@ class AblationReporter:
     """
 
     def __init__(self, results: List[AblationResult]) -> None:
+        """Init."""
         self.results = results
 
     # ------------------------------------------------------------------

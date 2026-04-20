@@ -143,6 +143,7 @@ def _nms(boxes: np.ndarray, scores: np.ndarray, iou_thresh: float) -> List[int]:
 
 
 def _normalize_class_name(name: str) -> str:
+    """Normalize class name."""
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
@@ -166,6 +167,7 @@ class _FallbackDetector:
         conf_threshold: float = CONF_THRESHOLD,
         emit_warning: bool = True,
     ) -> None:
+        """Init."""
         self.conf_threshold = conf_threshold
         if emit_warning:
             logger.warning(
@@ -290,6 +292,7 @@ class YOLODetector:
         use_sahi: bool = USE_SAHI,
         device: str = "",
     ) -> None:
+        """Init."""
         self.weights_path = Path(weights_path)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
@@ -307,6 +310,7 @@ class YOLODetector:
         self._load_model()
 
     def _load_class_conf_map(self) -> None:
+        """Load class conf map."""
         self._class_conf_map_norm = {}
         if self.class_conf_json_path is None:
             return
@@ -346,6 +350,7 @@ class YOLODetector:
         return min(self.conf_threshold, min(self._class_conf_map_norm.values()))
 
     def _validate_class_conf_map(self) -> None:
+        """Validate class conf map."""
         if not self._class_conf_map_norm:
             return
         model_keys = {_normalize_class_name(v) for v in self._model_names.values()}
@@ -364,6 +369,7 @@ class YOLODetector:
         )
 
     def _pass_class_conf(self, class_name: str, conf: float) -> bool:
+        """Pass class conf."""
         if not self._class_conf_map_norm:
             return conf >= self.conf_threshold
         key = _normalize_class_name(class_name)
@@ -843,6 +849,7 @@ class Detector:
         use_sahi: bool = USE_SAHI,
         device: str = "",
     ) -> None:
+        """Init."""
         self._yolo = YOLODetector(
             weights_path=weights_path,
             class_conf_json_path=class_conf_json_path,

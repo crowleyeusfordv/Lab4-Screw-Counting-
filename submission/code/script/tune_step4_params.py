@@ -62,18 +62,22 @@ class SequenceCache:
 
 
 def _parse_int_list(text: str) -> list[int]:
+    """Parse int list."""
     return [int(part.strip()) for part in text.split(",") if part.strip()]
 
 
 def _parse_float_list(text: str) -> list[float]:
+    """Parse float list."""
     return [float(part.strip()) for part in text.split(",") if part.strip()]
 
 
 def _parse_str_list(text: str) -> list[str]:
+    """Parse str list."""
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser(
         description="Search step4 parameters against true_count.json."
     )
@@ -197,6 +201,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_truth(path: Path) -> dict[str, dict[str, int]]:
+    """Load truth."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     truth: dict[str, dict[str, int]] = {}
     for video_name, counts in payload.items():
@@ -212,6 +217,7 @@ def _load_truth(path: Path) -> dict[str, dict[str, int]]:
 
 
 def _find_video_paths(video_dir: Path, truth: dict[str, dict[str, int]]) -> list[Path]:
+    """Find video paths."""
     video_paths: list[Path] = []
     for stem in sorted(truth.keys()):
         matched = None
@@ -236,6 +242,7 @@ def _load_sequence_cache(
     keyframe_strategy: str,
     uniform_count: int,
 ) -> SequenceCache:
+    """Load sequence cache."""
     with VideoReader(video_path) as reader:
         if keyframe_strategy == "motion":
             try:
@@ -285,6 +292,7 @@ def _load_sequence_cache(
 
 
 def _classify_clusters_with_detector_votes(clusters) -> tuple[list, list[int], int]:
+    """Classify clusters with detector votes."""
     counts = [0, 0, 0, 0, 0]
     missing_label_clusters = 0
     for cluster in clusters:
@@ -310,6 +318,7 @@ def _evaluate_sequence(
     dedup_method: str,
     invalid_reg_fallback: str,
 ) -> dict[str, object]:
+    """Evaluate sequence."""
     registration_module.ANCHOR_STRATEGY = anchor_strategy
     registrar = FrameRegistration(
         feature_type=feature_type,
@@ -349,6 +358,7 @@ def _evaluate_sequence(
 
 
 def _score_prediction(pred_counts: list[int], truth_counts: dict[str, int]) -> dict[str, int]:
+    """Score prediction."""
     truth_vec = [
         truth_counts["type1"],
         truth_counts["type2"],
@@ -367,6 +377,7 @@ def _score_prediction(pred_counts: list[int], truth_counts: dict[str, int]) -> d
 
 
 def main() -> int:
+    """Main."""
     args = _parse_args()
 
     video_dir = Path(args.video_dir)

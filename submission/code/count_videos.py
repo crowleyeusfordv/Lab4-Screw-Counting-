@@ -61,6 +61,7 @@ logger = logging.getLogger("count_videos")
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser(
         description="Formal batch interface: process one video or a directory of videos and output one txt report."
     )
@@ -188,6 +189,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _collect_video_paths(input_path: Path) -> list[Path]:
+    """Collect video paths."""
     if input_path.is_file():
         if input_path.suffix.lower() not in VIDEO_EXTENSIONS:
             raise ValueError(f"Unsupported video file: {input_path}")
@@ -210,6 +212,7 @@ def _collect_video_paths(input_path: Path) -> list[Path]:
 
 
 def _classify_clusters_with_detector_votes(clusters) -> tuple[list, list[int], int]:
+    """Classify clusters with detector votes."""
     missing_label_clusters = 0
     for cluster in clusters:
         if _cluster_has_detector_multiclass_labels(cluster):
@@ -229,6 +232,7 @@ def _process_video(
     args: argparse.Namespace,
     detector: Detector,
 ) -> dict[str, object]:
+    """Process video."""
     start_time = time.perf_counter()
     logger.info("Processing video: %s", video_path.name)
 
@@ -430,6 +434,7 @@ def _format_report(
     results: list[dict[str, object]],
     total_elapsed_sec: float,
 ) -> str:
+    """Format report."""
     success_count = sum(1 for item in results if item["status"] == "ok")
     fail_count = len(results) - success_count
 
@@ -492,6 +497,7 @@ def _format_report(
 
 
 def main() -> int:
+    """Main."""
     args = _parse_args()
 
     input_path = Path(args.input).resolve()

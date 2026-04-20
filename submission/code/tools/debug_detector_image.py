@@ -55,6 +55,7 @@ logger = logging.getLogger("debug_detector_image")
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser(
         description="Visualize detector outputs on a single image or a directory of images."
     )
@@ -104,10 +105,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _normalize_class_name(name: str) -> str:
+    """Normalize class name."""
     return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
 
 def _class_name_to_color(class_name: str) -> tuple[int, int, int]:
+    """Class name to color."""
     norm = _normalize_class_name(class_name)
     if norm.startswith("type") and norm[4:].isdigit():
         idx = int(norm[4:]) - 1
@@ -117,6 +120,7 @@ def _class_name_to_color(class_name: str) -> tuple[int, int, int]:
 
 
 def _class_name_sort_key(name: str) -> tuple[int, str]:
+    """Class name sort key."""
     norm = _normalize_class_name(name)
     if norm.startswith("type") and norm[4:].isdigit():
         return (int(norm[4:]), norm)
@@ -124,10 +128,12 @@ def _class_name_sort_key(name: str) -> tuple[int, str]:
 
 
 def _is_supported_image(path: Path) -> bool:
+    """Is supported image."""
     return path.is_file() and path.suffix.lower() in SUPPORTED_IMAGE_SUFFIXES
 
 
 def _collect_image_paths(input_path: Path) -> list[Path]:
+    """Collect image paths."""
     if input_path.is_file():
         if not _is_supported_image(input_path):
             raise ValueError(f"Unsupported image file: {input_path}")
@@ -143,6 +149,7 @@ def _collect_image_paths(input_path: Path) -> list[Path]:
 
 
 def _resolve_output_path(image_path: Path, input_path: Path, output_path: Path) -> Path:
+    """Resolve output path."""
     if input_path.is_file():
         return output_path
 
@@ -157,6 +164,7 @@ def _visualize_image(
     title: str,
     frame_id: int,
 ) -> int:
+    """Visualize image."""
     frame = cv2.imread(str(image_path))
     if frame is None:
         raise FileNotFoundError(f"Failed to read image: {image_path}")
@@ -213,6 +221,7 @@ def _visualize_image(
 
 
 def main() -> int:
+    """Main."""
     args = _parse_args()
 
     input_path = Path(args.image)

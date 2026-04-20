@@ -451,17 +451,20 @@ class Timer:
     """
 
     def __init__(self, name: str = "Timer") -> None:
+        """Init."""
         self.name = name
         self.elapsed: float = 0.0
         self._start: Optional[float] = None
         self._laps: List[Tuple[str, float]] = []
 
     def start(self) -> "Timer":
+        """Start."""
         self._start = time.perf_counter()
         self._laps.clear()
         return self
 
     def stop(self) -> float:
+        """Stop."""
         if self._start is None:
             return 0.0
         self.elapsed = time.perf_counter() - self._start
@@ -493,11 +496,14 @@ class Timer:
         return "\n".join(lines)
 
     def __enter__(self) -> "Timer":
+        """Enter."""
         self.start()
         return self
 
     def __exit__(self, *args) -> None:
+        """Exit."""
         self.stop()
 
     def __repr__(self) -> str:
+        """Repr."""
         return f"Timer('{self.name}', elapsed={self.elapsed:.4f}s)"

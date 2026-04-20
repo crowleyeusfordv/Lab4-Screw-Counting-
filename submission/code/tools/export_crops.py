@@ -117,6 +117,7 @@ class CropRecord:
     frame_h: int
 
     def to_dict(self) -> dict:
+        """To dict."""
         return {
             "video_name": self.video_name,
             "frame_id": self.frame_id,

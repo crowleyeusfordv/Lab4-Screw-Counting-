@@ -43,6 +43,7 @@ logger = logging.getLogger("step1_video_extract_detect")
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser(
         description="Step 1: read video, extract keyframes, and run detector on keyframes."
     )
@@ -99,10 +100,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _normalize_class_name(name: str) -> str:
+    """Normalize class name."""
     return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
 
 def _class_name_to_color(class_name: str) -> tuple[int, int, int]:
+    """Class name to color."""
     norm = _normalize_class_name(class_name)
     if norm.startswith("type") and norm[4:].isdigit():
         idx = int(norm[4:]) - 1
@@ -112,6 +115,7 @@ def _class_name_to_color(class_name: str) -> tuple[int, int, int]:
 
 
 def _class_name_sort_key(name: str) -> tuple[int, str]:
+    """Class name sort key."""
     norm = _normalize_class_name(name)
     if norm.startswith("type") and norm[4:].isdigit():
         return (int(norm[4:]), norm)
@@ -119,10 +123,12 @@ def _class_name_sort_key(name: str) -> tuple[int, str]:
 
 
 def _make_frame_stem(video_name: str, frame_id: int) -> str:
+    """Make frame stem."""
     return f"{video_name}_frame{frame_id:06d}"
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write json."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -134,6 +140,7 @@ def _build_detection_canvas(
     frame_id: int,
     detector_mode: str,
 ) -> tuple[cv2.typing.MatLike, dict[str, int]]:
+    """Build detection canvas."""
     canvas = frame.copy()
     per_class = Counter()
 
@@ -172,6 +179,7 @@ def _build_detection_canvas(
 
 
 def main() -> int:
+    """Main."""
     args = _parse_args()
 
     input_path = Path(args.input)

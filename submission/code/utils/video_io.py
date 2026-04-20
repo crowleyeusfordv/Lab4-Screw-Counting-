@@ -65,6 +65,7 @@ class VideoMeta:
         frame_count: int,
         rotation: int = 0,
     ) -> None:
+        """Init."""
         self.path = path
         self.fps = fps
         self.frame_count = frame_count
@@ -103,6 +104,7 @@ class VideoMeta:
         )
 
     def __repr__(self) -> str:
+        """Repr."""
         return (
             f"VideoMeta('{self.path.name}', "
             f"{self.width}x{self.height}, "
@@ -448,12 +450,15 @@ class VideoReader:
             logger.debug("已关闭视频: %s", self.path.name)
 
     def __enter__(self) -> "VideoReader":
+        """Enter."""
         return self
 
     def __exit__(self, *args) -> None:
+        """Exit."""
         self.close()
 
     def __del__(self) -> None:
+        """Del."""
         try:
             self.close()
         except Exception:

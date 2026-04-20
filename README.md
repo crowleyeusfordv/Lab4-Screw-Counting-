@@ -6,16 +6,74 @@
 
 ---
 
+## 0. 最终提交指南（按课程文档）
+
+以 `HOMEWORK_VIDEO_SCREW_COUNTING.md` 为准，最终是 **两部分独立提交**：
+
+1. **代码压缩包**（团队仅队长提交 1 份，交到交大云盘）
+2. **实验报告 PDF**（每位组员单独提交到 Canvas，且写清个人贡献）
+
+### 0.1 代码压缩包必须满足的目录结构
+
+压缩包根目录必须是 `submission/`，核心结构如下：
+
+```text
+submission.zip/
+  code/
+    run.py
+    README.md
+    requirements.txt
+    ...（其他代码与模型）
+```
+
+### 0.2 必须提交（代码包内）
+
+- `submission/code/run.py`：统一入口，参数接口必须与作业要求一致
+- `submission/code/README.md`：环境配置、运行方式、团队成员学号姓名
+- `submission/code/` 下所有运行必须代码（含 `modules/`、`utils/` 等）
+- 模型权重（若代码依赖权重运行，需一并提交）
+
+### 0.3 运行后必须产出（评测时由助教运行代码生成）
+
+运行命令（必须支持）：
+
+```bash
+python run.py --data_dir /path/to/test_videos_folder --output_path ./result.npy --output_time_path ./time.txt --mask_output_path ./mask_folder/
+```
+
+程序应产出：
+
+- `result.npy`：`numpy.load(..., allow_pickle=True).item()` 后是 `dict`
+  - key：视频名（不带后缀）
+  - value：长度为 5 的计数数组，顺序 `[Type_1, Type_2, Type_3, Type_4, Type_5]`
+- `time.txt`：仅一个数字（总处理时长，秒）
+- `mask_folder/`：每段视频 1 张掩膜叠加图，命名 `{video_name}_mask.png`
+
+### 0.4 建议不要放进提交包
+
+- 本地调试输出目录：`out/`、`out_*`、`_test_out/`
+- 日志与临时文件：`run_log*.txt`、`result.npy`（本地测试生成的）、缓存文件
+- 开发视频与中间数据（体积大且非必须）
+
+### 0.5 提交前 1 分钟自检
+
+- 能在干净环境安装：`pip install -r requirements.txt`
+- 能一条命令跑通 `run.py` 且不依赖你机器私有绝对路径
+- `submission/code/README.md` 中已写团队成员姓名+学号
+- 输出格式与命名严格符合作业文档（尤其 key 不带后缀、mask 文件名格式）
+- 打包后解压检查，目录第一层就是 `submission/`
+
+---
+
 ## 1. 团队成员
 
 | 学号 | 姓名 | 分工 |
 |------|------|------|
-| （学号A） | （姓名A） | A：几何配准与去重 |
-| （学号B） | （姓名B） | B：检测数据与 Detector |
-| （学号C） | （姓名C） | C：分类与结果融合 |
-| 523030910103 | 魏思齐 | D：工程封装与评测 |
+| 523030910127 | 杨文潇 | yolo-seg目标检测与实例分割模型训练 |
+| 523030910126 | 欧明亮 | 分析代码各模块消耗时间占比优化运行速度 |
+| 523030910128 | 莫韫恺 | 视频处理计数流水线构建 |
+| 523030910103 | 魏思齐 | 视频处理链路的工程级性能优化与工程封装 |
 
-> 提交前请将占位符替换为真实信息。
 
 ---
 

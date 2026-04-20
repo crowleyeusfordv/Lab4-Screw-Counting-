@@ -105,21 +105,26 @@ class BBox(NamedTuple):
 
     @property
     def width(self) -> float:
+        """Width."""
         return self.x2 - self.x1
 
     @property
     def height(self) -> float:
+        """Height."""
         return self.y2 - self.y1
 
     @property
     def cx(self) -> float:
+        """Cx."""
         return (self.x1 + self.x2) / 2.0
 
     @property
     def cy(self) -> float:
+        """Cy."""
         return (self.y1 + self.y2) / 2.0
 
     def area(self) -> float:
+        """Area."""
         return max(0.0, self.width) * max(0.0, self.height)
 
     def to_xywh(self) -> Tuple[float, float, float, float]:
@@ -197,14 +202,17 @@ class Dataset(NamedTuple):
 
     @property
     def n_images(self) -> int:
+        """N images."""
         return len(self.images)
 
     @property
     def n_annotations(self) -> int:
+        """N annotations."""
         return sum(len(img.annotations) for img in self.images)
 
     @property
     def n_classes(self) -> int:
+        """N classes."""
         return len(self.class_names)
 
     def class_counts(self) -> Dict[str, int]:

@@ -286,6 +286,7 @@ class _FallbackClassifier:
     """
 
     def __init__(self) -> None:
+        """Init."""
         logger.warning(
             "⚠️  使用兜底分类器（随机 + 颜色启发式）。"
             "精度极低！请尽快提供 models/classifier.pt。"
@@ -369,6 +370,7 @@ class TorchClassifier:
         use_fp16: bool = USE_FP16,
         device: str = "",
     ) -> None:
+        """Init."""
         self.weights_path = Path(weights_path)
         self.input_size = input_size
         self.use_fp16 = use_fp16

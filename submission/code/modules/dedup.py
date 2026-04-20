@@ -189,6 +189,7 @@ class _IncrementalClusterer:
     """
 
     def __init__(self, dist_thresh: float = CLUSTER_DIST_THRESH) -> None:
+        """Init."""
         self.dist_thresh = dist_thresh
         self._clusters: List[_ClusterBuilder] = []
 
@@ -239,6 +240,7 @@ class _IncrementalClusterer:
         ref_center: np.ndarray,
         ref_bbox: Optional[np.ndarray],
     ) -> int:
+        """New cluster."""
         cid = len(self._clusters)
         cb = _ClusterBuilder(cluster_id=cid)
         cb.add_observation(detection, ref_center, ref_bbox)
@@ -274,6 +276,7 @@ class _ClusterBuilder:
     """单个 Cluster 的构建器（内部类，不对外暴露）。"""
 
     def __init__(self, cluster_id: int) -> None:
+        """Init."""
         self.cluster_id = cluster_id
         self.observations: List[Detection] = []
         self._ref_centers: List[np.ndarray] = []
@@ -281,6 +284,7 @@ class _ClusterBuilder:
 
     @property
     def n_observations(self) -> int:
+        """N observations."""
         return len(self.observations)
 
     @property
@@ -296,6 +300,7 @@ class _ClusterBuilder:
         ref_center: np.ndarray,
         ref_bbox: Optional[np.ndarray],
     ) -> None:
+        """Add observation."""
         self.observations.append(detection)
         self._ref_centers.append(ref_center)
         self._ref_bboxes.append(ref_bbox)
@@ -352,6 +357,7 @@ class _DBSCANClusterer:
         eps: float = CLUSTER_DIST_THRESH,
         min_samples: int = MIN_OBSERVATIONS,
     ) -> None:
+        """Init."""
         self.eps = eps
         self.min_samples = min_samples
 

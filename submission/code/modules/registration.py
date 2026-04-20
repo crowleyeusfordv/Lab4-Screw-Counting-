@@ -297,12 +297,14 @@ class _FrameFeatureCache:
     """
 
     def __init__(self) -> None:
+        """Init."""
         self.frame_id: int = -1
         self.keypoints: Optional[List[cv2.KeyPoint]] = None
         self.descriptors: Optional[np.ndarray] = None
         self.image_shape: Optional[Tuple[int, int]] = None  # (H, W)
 
     def is_valid(self) -> bool:
+        """Is valid."""
         return (
             self.frame_id >= 0
             and self.keypoints is not None
@@ -316,12 +318,14 @@ class _FrameFeatureCache:
         descriptors: np.ndarray,
         image_shape: Tuple[int, int],
     ) -> None:
+        """Set."""
         self.frame_id = frame_id
         self.keypoints = keypoints
         self.descriptors = descriptors
         self.image_shape = image_shape
 
     def clear(self) -> None:
+        """Clear."""
         self.frame_id = -1
         self.keypoints = None
         self.descriptors = None
@@ -619,6 +623,7 @@ class FrameRegistration:
         frame_id: int,
         inlier_ratio: float = 1.0,
     ) -> Registration:
+        """Identity registration."""
         return Registration(
             frame_id=frame_id,
             H_to_ref=np.eye(3, dtype=np.float64),
@@ -627,6 +632,7 @@ class FrameRegistration:
         )
 
     def _invalid_registration(self, frame_id: int) -> Registration:
+        """Invalid registration."""
         return Registration(
             frame_id=frame_id,
             H_to_ref=np.eye(3, dtype=np.float64),
@@ -639,6 +645,7 @@ class FrameRegistration:
         child_reg: Registration,
         parent_reg: Registration,
     ) -> Registration:
+        """Compose registrations."""
         if not child_reg.valid or not parent_reg.valid:
             return self._invalid_registration(child_reg.frame_id)
         return Registration(
@@ -657,6 +664,7 @@ class FrameRegistration:
         ref_frame_id: int,
         ref_scale: float,
     ) -> Registration:
+        """Register pair."""
         success = self.set_reference(
             ref_frame,
             frame_id=ref_frame_id,
@@ -675,6 +683,7 @@ class FrameRegistration:
         n_frames: int,
         anchor_count: int,
     ) -> List[int]:
+        """Select anchor indices."""
         if n_frames <= 0:
             return []
 
@@ -701,6 +710,7 @@ class FrameRegistration:
         full_res_scales: List[float],
         anchor_indices: List[int],
     ) -> int:
+        """Select global root anchor."""
         preferred_root = self._select_reference_index(len(keyframe_images))
         ordered_candidates = sorted(
             anchor_indices,
@@ -731,6 +741,7 @@ class FrameRegistration:
         keyframe_ids: List[int],
         full_res_scales: List[float],
     ) -> Tuple[Registration, Optional[int]]:
+        """Register via known anchors."""
         frame_id = keyframe_ids[frame_idx]
 
         for anchor_idx in candidate_anchor_indices:
@@ -888,6 +899,7 @@ class FrameRegistration:
         full_res_scales: Optional[List[float]] = None,
         anchor_count: int = 4,
     ) -> List[Registration]:
+        """Register sequence multi anchor."""
         if not keyframe_images:
             return []
 
@@ -1035,6 +1047,7 @@ class FrameRegistration:
         return dict(self._stats)
 
     def get_last_sequence_info(self) -> Dict[str, object]:
+        """Get last sequence info."""
         return dict(self._last_sequence_info)
 
     def print_stats(self) -> None:

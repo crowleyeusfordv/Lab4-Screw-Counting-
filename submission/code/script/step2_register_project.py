@@ -47,6 +47,7 @@ logger = logging.getLogger("step2_register_project")
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser(
         description="Step 2: read video, extract keyframes, run detector, then registration and projection."
     )
@@ -135,10 +136,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _normalize_class_name(name: str) -> str:
+    """Normalize class name."""
     return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
 
 def _class_name_to_color(class_name: str) -> tuple[int, int, int]:
+    """Class name to color."""
     norm = _normalize_class_name(class_name)
     if norm.startswith("type") and norm[4:].isdigit():
         idx = int(norm[4:]) - 1
@@ -148,6 +151,7 @@ def _class_name_to_color(class_name: str) -> tuple[int, int, int]:
 
 
 def _class_name_sort_key(name: str) -> tuple[int, str]:
+    """Class name sort key."""
     norm = _normalize_class_name(name)
     if norm.startswith("type") and norm[4:].isdigit():
         return (int(norm[4:]), norm)
@@ -155,10 +159,12 @@ def _class_name_sort_key(name: str) -> tuple[int, str]:
 
 
 def _make_frame_stem(video_name: str, frame_id: int) -> str:
+    """Make frame stem."""
     return f"{video_name}_frame{frame_id:06d}"
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write json."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -170,6 +176,7 @@ def _build_detection_canvas(
     frame_id: int,
     detector_mode: str,
 ) -> tuple[np.ndarray, dict[str, int]]:
+    """Build detection canvas."""
     canvas = frame.copy()
     per_class = Counter()
 
@@ -208,6 +215,7 @@ def _build_detection_canvas(
 
 
 def _frame_color(index: int, total: int) -> tuple[int, int, int]:
+    """Frame color."""
     denom = max(total, 1)
     hue = int(round(179 * (index % denom) / denom))
     hsv = np.uint8([[[hue, 220, 255]]])
@@ -223,6 +231,7 @@ def _draw_projected_centers(
     reference_frame_id: int,
     anchor_indices: list[int],
 ) -> np.ndarray:
+    """Draw projected centers."""
     canvas = reference_frame.copy()
     valid_regs = sum(1 for reg in registrations if reg.valid)
 
@@ -248,6 +257,7 @@ def _draw_projected_centers(
 
 
 def main() -> int:
+    """Main."""
     args = _parse_args()
 
     input_path = Path(args.input)

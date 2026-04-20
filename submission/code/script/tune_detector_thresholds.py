@@ -65,6 +65,7 @@ class VideoCache:
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser(description="Tune 5-class detector thresholds with 0.01 step.")
     parser.add_argument(
         "--video_dir",
@@ -149,10 +150,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _normalize(name: str) -> str:
+    """Normalize."""
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 def _load_truth(path: Path) -> Dict[str, List[int]]:
+    """Load truth."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     truth: Dict[str, List[int]] = {}
     for video_name, counts in payload.items():
@@ -167,6 +170,7 @@ def _load_truth(path: Path) -> Dict[str, List[int]]:
 
 
 def _find_video_paths(video_dir: Path, truth: Dict[str, List[int]]) -> List[Path]:
+    """Find video paths."""
     video_paths: List[Path] = []
     for stem in sorted(truth.keys()):
         found = None
@@ -186,6 +190,7 @@ def _find_video_paths(video_dir: Path, truth: Dict[str, List[int]]) -> List[Path
 
 
 def _extract_keyframes(reader: VideoReader, strategy: str, uniform_count: int) -> List[int]:
+    """Extract keyframes."""
     if strategy == "motion":
         try:
             ids = _extract_keyframes_motion(reader)
@@ -200,6 +205,7 @@ def _extract_keyframes(reader: VideoReader, strategy: str, uniform_count: int) -
 
 
 def _classify_detector_votes(clusters) -> List[int]:
+    """Classify detector votes."""
     counts = [0, 0, 0, 0, 0]
     for cluster in clusters:
         if _cluster_has_detector_multiclass_labels(cluster):
@@ -215,8 +221,10 @@ def _cache_video(
     keyframe_strategy: str,
     uniform_count: int,
 ) -> VideoCache:
+    """Cache video."""
     def _compact_detection(det: Detection) -> Detection:
         # Seg masks are huge and not used by threshold tuning; drop them to avoid OOM.
+        """Compact detection."""
         return Detection(
             frame_id=det.frame_id,
             bbox=det.bbox.copy(),
@@ -286,6 +294,7 @@ def _filter_detections(
     detections: List[List[Detection]],
     thresholds: Dict[str, float],
 ) -> List[List[Detection]]:
+    """Filter detections."""
     filtered: List[List[Detection]] = []
     for frame_dets in detections:
         keep: List[Detection] = []
@@ -307,6 +316,7 @@ def _evaluate_thresholds(
     dist_thresh: float,
     min_observations: int,
 ) -> Dict[str, object]:
+    """Evaluate thresholds."""
     per_video: Dict[str, Dict[str, object]] = {}
     total_l1 = 0
 
@@ -338,6 +348,7 @@ def _evaluate_thresholds(
 
 
 def _frange(step: float) -> List[float]:
+    """Frange."""
     n = int(round(1.0 / step))
     values = []
     for i in range(1, n):
@@ -356,6 +367,7 @@ def _search_coordinate_descent(
     dist_thresh: float,
     min_observations: int,
 ) -> Dict[str, object]:
+    """Search coordinate descent."""
     grid_values = _frange(step)
     current = {k: round(float(v), 2) for k, v in init_thresholds.items()}
     history: List[Dict[str, object]] = []
@@ -407,6 +419,7 @@ def _search_coordinate_descent(
 
 
 def main() -> int:
+    """Main."""
     args = _parse_args()
 
     truth = _load_truth(Path(args.truth_json))

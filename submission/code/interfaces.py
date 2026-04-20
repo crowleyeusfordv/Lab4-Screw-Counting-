@@ -88,6 +88,7 @@ class Detection:
         )
 
     def __repr__(self) -> str:
+        """Repr."""
         return (
             f"Detection(frame={self.frame_id}, "
             f"bbox=[{self.bbox[0]:.1f},{self.bbox[1]:.1f},"
@@ -182,6 +183,7 @@ class Registration:
         ], dtype=np.float32)
 
     def __repr__(self) -> str:
+        """Repr."""
         return (
             f"Registration(frame={self.frame_id}, valid={self.valid}, "
             f"inlier_ratio={self.inlier_ratio:.3f})"
@@ -255,6 +257,7 @@ class Cluster:
         return len(self.observations)
 
     def __repr__(self) -> str:
+        """Repr."""
         return (
             f"Cluster(id={self.cluster_id}, "
             f"class={self.type_label}, "
@@ -303,6 +306,7 @@ class VideoResult:
         return self.video_name, self.counts
 
     def __repr__(self) -> str:
+        """Repr."""
         return (
             f"VideoResult(video='{self.video_name}', "
             f"counts={self.counts}, "
